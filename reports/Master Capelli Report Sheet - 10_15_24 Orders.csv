@@ -1,4 +1,4 @@
-Order ID,Order Status,Order Date,Order Range, Shipped Qty , Unshipped Qty ,Club Name,Combined Order Status
+Order ID,Order Status,Order Date,Order Range,Shipped Quantity,Unshipped Quantity,Club,Combined Order Status
 567309,Shipped,1/2/2024,Older than 5 weeks,  3 ,  -   ,Rush National Soccer, Shipped 
 567586,Shipped,1/5/2024,Older than 5 weeks,  1 ,  -   ,Rush Coaches, Shipped 
 567631,Shipped,1/6/2024,Older than 5 weeks,  2 ,  -   ,Rush Coaches, Shipped 
