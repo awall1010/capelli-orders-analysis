@@ -17,9 +17,13 @@ faulthandler.enable()
 
 # -------------------------- Logging Setup -------------------------- #
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, filename='app_debug.log', filemode='w',
-                    format='%(name)s - %(levelname)s - %(message)s')
+# Configure logging to display messages in the console and save to a file
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename='app_debug.log',
+    filemode='w',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger()
 
 # -------------------------- Streamlit App Setup -------------------------- #
@@ -44,9 +48,36 @@ COLUMN_MAPPING = {
     # Add more mappings if there are other inconsistencies
 }
 
-# -------------------------- Data Loading Function -------------------------- #
+# -------------------------- Text Cleaning Function -------------------------- #
+
+def clean_text(text):
+    """
+    Cleans text by removing all types of whitespace and converting to lowercase.
+
+    Parameters:
+    - text (str): The text to clean.
+
+    Returns:
+    - str: The cleaned text.
+    """
+    if pd.isna(text):
+        return ''
+    # Remove all types of whitespace characters and lowercase the text
+    return re.sub(r'\s+', ' ', str(text)).strip().lower()
+
+# -------------------------- Data Loading and Processing Function -------------------------- #
 
 def load_data_from_directory(data_dir):
+    """
+    Loads and processes all CSV files from the specified directory.
+
+    Parameters:
+    - data_dir (str): Path to the directory containing CSV files.
+
+    Returns:
+    - pd.DataFrame: Combined and processed DataFrame.
+    - set: Set of unique report dates.
+    """
     if not os.path.exists(data_dir):
         st.error(f"The data directory '{data_dir}' does not exist. Please ensure it is present in your repository.")
         logger.error(f"Data directory '{data_dir}' does not exist.")
@@ -77,16 +108,16 @@ def load_data_from_directory(data_dir):
             continue
 
         # Extract the report date from the filename using regex
-        # Adjust the regex to match your filenames
         match = re.search(r'Master\s+Capelli\s+Report\s+Sheet\s+-\s+(\d{1,2}_\d{1,2}_\d{2})\s+Orders\.csv', filename, re.IGNORECASE)
         if match:
             date_str = match.group(1)
+            logger.info(f"Extracted date string: {date_str} from {filename}")
             # Convert date string to datetime object
             try:
                 report_date = pd.to_datetime(date_str, format='%m_%d_%y')
                 report_dates_set.add(report_date)
-                logger.info(f"Extracted Report Date {report_date.strftime('%Y-%m-%d')} from {filename}")
-            except ValueError:
+                logger.info(f"Converted report date: {report_date.strftime('%Y-%m-%d')}")
+            except ValueError as ve:
                 st.warning(f"Filename '{filename}' contains an invalid date format. Please ensure the date is in 'mm_dd_yy' format.")
                 logger.warning(f"Invalid date format in filename: {filename}")
                 skipped_files.append(filename)
@@ -111,6 +142,32 @@ def load_data_from_directory(data_dir):
             skipped_files.append(filename)
             continue  # Skip this file
 
+        # Apply text cleaning to relevant columns
+        text_columns = ['Order Status', 'Combined Order Status', 'Order Range']
+        for col in text_columns:
+            if col in df.columns:
+                df[col] = df[col].apply(clean_text)
+                logger.debug(f"Standardized column '{col}' in {filename}: {df[col].unique()}")
+            else:
+                logger.warning(f"Column '{col}' not found in the data of {filename}.")
+
+        # Categorize orders based on 'Order Range' and 'Combined Order Status'
+        def categorize_order(row):
+            if row['Order Range'] == 'older than 5 weeks':
+                if row['Combined Order Status'] in ['open', 'partially shipped']:
+                    return 'Outstanding Over 5 Weeks'
+            return 'Other'
+
+        df['Order Category'] = df.apply(categorize_order, axis=1)
+        logger.debug(f"Order categories in {filename}: {df['Order Category'].unique()}")
+
+        # Correct any 'Oth' entries to 'Other'
+        oth_entries = df[df['Order Category'].str.lower() == 'oth']
+        if not oth_entries.empty:
+            st.warning(f"Found {len(oth_entries)} entries with 'Order Category' as 'Oth' in {filename}. Correcting them to 'Other'.")
+            logger.warning(f"Found 'Oth' entries in {filename}. Correcting to 'Other'.")
+            df['Order Category'] = df['Order Category'].replace('oth', 'Other')
+
         # Add the extracted report date to the DataFrame
         df['Report Date'] = report_date
 
@@ -123,7 +180,7 @@ def load_data_from_directory(data_dir):
         logger.warning(f"Skipped files: {skipped_files}")
 
     if not df_list:
-        st.error("No valid data loaded. Please check your data files in the 'data' directory.")
+        st.error("No valid data loaded. Please check your data files in the 'reports' directory.")
         logger.error("No valid data loaded after processing all files.")
         st.stop()
 
@@ -150,22 +207,24 @@ for col in numeric_columns:
 
 # Handle missing values
 data.fillna({'Shipped Quantity': 0, 'Unshipped Quantity': 0}, inplace=True)
-data['Combined Order Status'] = data['Combined Order Status'].fillna('Unknown')
-
-# Standardize text columns
-data['Order Status'] = data['Order Status'].astype(str).str.strip().str.lower()
-data['Combined Order Status'] = data['Combined Order Status'].astype(str).str.strip().str.lower()
-data['Club'] = data['Club'].astype(str).str.strip()
+data['Combined Order Status'] = data['Combined Order Status'].fillna('unknown')
 
 # Define a function to categorize orders based on 'Order Range'
 def categorize_order(row):
-    if row['Order Range'] == 'Older than 5 weeks':
+    if row['Order Range'] == 'older than 5 weeks':
         if row['Combined Order Status'] in ['open', 'partially shipped']:
             return 'Outstanding Over 5 Weeks'
     return 'Other'
 
 # Apply the function to categorize orders
 data['Order Category'] = data.apply(categorize_order, axis=1)
+
+# Correct any remaining 'Oth' entries to 'Other'
+oth_entries_final = data[data['Order Category'].str.lower() == 'oth']
+if not oth_entries_final.empty:
+    st.warning(f"Found {len(oth_entries_final)} entries with 'Order Category' as 'Oth'. Correcting them to 'Other'.")
+    logger.warning(f"Found 'Oth' entries in data. Correcting to 'Other'.")
+    data['Order Category'] = data['Order Category'].replace('oth', 'Other')
 
 # Ensure 'Order ID' is of type string to prevent issues during merging
 data['Order ID'] = data['Order ID'].astype(str)
@@ -213,8 +272,6 @@ sorted_report_dates = sorted(pivot_table.columns[1:])  # Exclude 'Club' column
 
 # -------------------------- Compute Total Open Orders Over 5 Weeks Old -------------------------- #
 
-# **New Addition Starts Here**
-
 # Aggregate total open orders over 5 weeks old across all clubs per report date
 total_aggregation = data[data['Order Category'] == 'Outstanding Over 5 Weeks'].dropna(subset=['Report Date']).groupby('Report Date').size().reset_index(name='Total Open Orders Over 5 Weeks')
 
@@ -235,8 +292,6 @@ formatted_total = total_aggregation.copy()
 formatted_total = formatted_total.style.format("{:,}", subset=['Total Open Orders Over 5 Weeks'])
 
 st.dataframe(formatted_total)
-
-# **New Addition Ends Here**
 
 # -------------------------- Display Summary Table -------------------------- #
 
@@ -297,11 +352,8 @@ if data_filtered.empty:
 trend_data = []
 for report_date in sorted(data_filtered['Report Date'].dropna().unique()):
     df_report = data_filtered[data_filtered['Report Date'] == report_date]
-
     # Number of open orders over 5 weeks old
-    open_over_5_weeks = df_report[df_report['Order Category'] == 'Outstanding Over 5 Weeks']
-    num_open_over_5_weeks = open_over_5_weeks['Order ID'].nunique()
-
+    num_open_over_5_weeks = df_report[df_report['Order Category'] == 'Outstanding Over 5 Weeks']['Order ID'].nunique()
     trend_data.append({
         'Report Date': report_date,
         'Open Orders Over 5 Weeks': num_open_over_5_weeks
@@ -356,15 +408,6 @@ for i in range(1, len(sorted_report_dates)):
 
     # Find orders that were not over 5 weeks old in prev_date but are over 5 weeks old in curr_date
     merged = prev_pivot.join(curr_pivot, lsuffix='_prev', rsuffix='_curr', how='outer')
-    condition = (merged['Order Category_prev'] == 'Outstanding Over 5 Weeks') & (merged['Order Category_curr'] == 'Outstanding Over 5 Weeks')
-    # Adjusted condition based on new categorization
-    # Previously, it was checking orders becoming over 5 weeks old, but since categorization is based on Order Range,
-    # likely all orders with 'Outstanding Over 5 Weeks' are already over 5 weeks old.
-
-    # However, to keep the logic similar, we can count the unique orders in 'curr_pivot' that are 'Outstanding Over 5 Weeks'
-    # and were not 'Outstanding Over 5 Weeks' in 'prev_pivot'
-
-    # Adjusted condition
     condition = (merged['Order Category_prev'] != 'Outstanding Over 5 Weeks') & (merged['Order Category_curr'] == 'Outstanding Over 5 Weeks')
     new_over_5_weeks_orders = merged[condition].reset_index()
     num_new_over_5_weeks_orders = new_over_5_weeks_orders['Order ID'].nunique()
