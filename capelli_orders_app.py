@@ -624,7 +624,7 @@ else:
 st.subheader("Orders Happening Over Time")
 
 st.write("""
-This graph shows the number of orders happening over time based on shipping dates.
+This graph shows the number of orders happening over time based on shipping dates, grouped by week.
 """)
 
 # Load the new data from 'shippingdates' subdirectory
@@ -685,8 +685,12 @@ if not shipping_data.empty:
         # Compute time difference in days
         shipping_data['Time Difference'] = (shipping_data['Shipping Date'] - shipping_data['Date Created']).dt.days
         # Exclude orders with missing shipping dates (already done with dropna)
-        # Count unique 'Customer Reference' per 'Shipping Date'
-        orders_over_time = shipping_data.groupby('Shipping Date')['Customer Reference'].nunique().reset_index(name='Unique Orders')
+
+        # Set 'Shipping Date' as index
+        shipping_data.set_index('Shipping Date', inplace=True)
+
+        # Group by week and count unique 'Customer Reference'
+        orders_over_time = shipping_data['Customer Reference'].resample('W').nunique().reset_index(name='Unique Orders')
         # Sort by 'Shipping Date'
         orders_over_time = orders_over_time.sort_values('Shipping Date')
 
@@ -696,8 +700,8 @@ if not shipping_data.empty:
             x='Shipping Date',
             y='Unique Orders',
             markers=True,
-            title='Orders Happening Over Time',
-            labels={'Shipping Date': 'Shipping Date', 'Unique Orders': 'Number of Orders'}
+            title='Orders Happening Over Time (Weekly)',
+            labels={'Shipping Date': 'Week Starting', 'Unique Orders': 'Number of Orders'}
         )
         fig_orders_over_time.update_layout(
             xaxis=dict(tickangle=45),
@@ -705,13 +709,22 @@ if not shipping_data.empty:
             template='plotly_white'
         )
         st.plotly_chart(fig_orders_over_time, use_container_width=True)
-        logger.info("Plotted Orders Happening Over Time using Plotly")
+        logger.info("Plotted Orders Happening Over Time (Weekly) using Plotly")
 
         # Plot shipping time for each order over time
         st.subheader("Shipping Time for Each Order Over Time")
         st.write("""
         This graph shows how long it took for each order to ship, based on the shipping date over time.
         """)
+
+        # Reset index to access 'Shipping Date' as a column
+        shipping_data.reset_index(inplace=True)
+
+        # Compute the overall average shipping time
+        overall_avg_shipping_time = shipping_data['Time Difference'].mean().round(2)
+
+        # Display the overall average shipping time
+        st.markdown(f"### **Average Shipping Time Across All Orders: {overall_avg_shipping_time} days**")
 
         # Create a scatter plot of shipping time per order over time
         fig_shipping_times = px.scatter(
