@@ -646,7 +646,7 @@ def load_shipping_data(shipping_dir):
 
     # Exclude hidden files and temporary .icloud files
     shipping_files = [f for f in os.listdir(shipping_dir)
-                     if f.endswith('.csv') and not f.startswith('.') and not f.endswith('.icloud')]
+                      if f.endswith('.csv') and not f.startswith('.') and not f.endswith('.icloud')]
 
     if not shipping_files:
         st.error(f"No valid CSV files found in the '{shipping_dir}' directory. Please add the required data files.")
@@ -682,15 +682,25 @@ if not shipping_data.empty:
         shipping_data['Date Created'] = pd.to_datetime(shipping_data['Date Created'], errors='coerce')
         # Remove entries with invalid dates
         shipping_data = shipping_data.dropna(subset=['Shipping Date', 'Date Created'])
-        # Compute time difference in days
-        shipping_data['Time Difference'] = (shipping_data['Shipping Date'] - shipping_data['Date Created']).dt.days
-        # Exclude orders with missing shipping dates (already done with dropna)
+
+        # **Process the data before any analysis**
+        # Remove duplicates of 'Customer Reference' by aggregating
+        order_data = shipping_data.groupby('Customer Reference', as_index=False).agg({
+            'Club Name': 'first',         # Assuming 'Club Name' is consistent within an order
+            'Date Created': 'min',        # Earliest creation date among items
+            'Shipping Date': 'max'        # Latest shipping date among items
+        })
+
+        # Compute time difference in days for each order
+        order_data['Time Difference'] = (order_data['Shipping Date'] - order_data['Date Created']).dt.days
+
+        # **Proceed with the analysis using 'order_data'**
 
         # Set 'Shipping Date' as index
-        shipping_data.set_index('Shipping Date', inplace=True)
+        order_data.set_index('Shipping Date', inplace=True)
 
-        # Group by week and count unique 'Customer Reference'
-        orders_over_time = shipping_data['Customer Reference'].resample('W').nunique().reset_index(name='Unique Orders')
+        # Group by week and count unique orders
+        orders_over_time = order_data.resample('W').size().reset_index(name='Unique Orders')
         # Sort by 'Shipping Date'
         orders_over_time = orders_over_time.sort_values('Shipping Date')
 
@@ -718,17 +728,17 @@ if not shipping_data.empty:
         """)
 
         # Reset index to access 'Shipping Date' as a column
-        shipping_data.reset_index(inplace=True)
+        order_data.reset_index(inplace=True)
 
         # Compute the overall average shipping time
-        overall_avg_shipping_time = shipping_data['Time Difference'].mean().round(2)
+        overall_avg_shipping_time = order_data['Time Difference'].mean().round(2)
 
         # Display the overall average shipping time
         st.markdown(f"### **Average Shipping Time Across All Orders: {overall_avg_shipping_time} days**")
 
         # Create a scatter plot of shipping time per order over time
         fig_shipping_times = px.scatter(
-            shipping_data,
+            order_data,
             x='Shipping Date',
             y='Time Difference',
             title='Shipping Time for Each Order Over Time',
