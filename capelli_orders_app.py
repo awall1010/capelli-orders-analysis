@@ -474,9 +474,47 @@ formatted_ship_and_open = display_ship_and_open.style.format({
 
 st.subheader("Shipped Orders and Open Orders Over 5 Weeks Old by Report Date")
 st.write("""
-This table shows, for each report date, the **cumulative number of shipped orders since May 1**, the **total number of open orders over five weeks old**, and the **percentage of open orders over five weeks old**.
+This table shows, for each report date, the **total number of open orders over five weeks old**, and the **percentage of open orders over five weeks old**.
 """)
 st.dataframe(formatted_ship_and_open)
+
+# -------------------------- Add Summary of Open Orders Over 5 Weeks Old by Club -------------------------- #
+
+st.subheader("Summary of Open Orders Over 5 Weeks Old by Club")
+st.write("""
+This table shows the number of open orders over five weeks old for each club across different report dates.
+""")
+
+# Calculate the number of open orders over five weeks old per club per report date
+summary_open_orders = data[data['Order Category'] == 'Outstanding Over 5 Weeks'] \
+    .groupby(['Club', 'Report Date']) \
+    .size() \
+    .reset_index(name='Open Orders Over 5 Weeks')
+
+# Pivot the table to have report dates as columns
+summary_pivot = summary_open_orders.pivot(index='Club', columns='Report Date', values='Open Orders Over 5 Weeks').fillna(0).astype(int)
+
+# Reset index to turn 'Club' back into a column
+summary_pivot.reset_index(inplace=True)
+
+# Sort the pivot table by Club name
+summary_pivot = summary_pivot.sort_values('Club')
+
+# Rename columns for clarity
+summary_pivot.columns = ['Club'] + [dt.strftime('%Y-%m-%d') for dt in summary_pivot.columns if dt != 'Club']
+
+# Apply styling
+styled_summary_pivot = summary_pivot.style.set_properties(**{
+    'background-color': 'white',
+    'color': 'black',
+    'border-color': 'black'
+}).set_table_styles([
+    dict(selector='th', props=[('background-color', '#f2f2f2'), ('position', 'sticky'), ('top', '0')]),
+    dict(selector='th.col0', props=[('background-color', '#f2f2f2'), ('position', 'sticky'), ('left', '0')]),
+    dict(selector='td.col0', props=[('background-color', '#f9f9f9'), ('position', 'sticky'), ('left', '0')]),
+])
+
+st.dataframe(styled_summary_pivot)
 
 # -------------------------- Display Percentage of Open Orders Over 5 Weeks Old by Club and Report Date -------------------------- #
 
@@ -489,19 +527,20 @@ This table shows the percentage of open orders over five weeks old for each club
 total_orders_per_club_date = data.groupby(['Club', 'Report Date'])['Order ID'].nunique().reset_index(name='Total Orders')
 
 # Calculate 'Outstanding Over 5 Weeks' orders per club per report date
-outstanding_orders_per_club_date = data[data['Order Category'] == 'Outstanding Over 5 Weeks'].groupby(['Club', 'Report Date'])['Order ID'].nunique().reset_index(name='Outstanding Over 5 Weeks')
+outstanding_orders_per_club_date = data[data['Order Category'] == 'Outstanding Over 5 Weeks'] \
+    .groupby(['Club', 'Report Date'])['Order ID'].nunique().reset_index(name='Outstanding Over 5 Weeks')
 
 # Merge total orders with outstanding orders
 percentage_per_club_date = pd.merge(total_orders_per_club_date, outstanding_orders_per_club_date, on=['Club', 'Report Date'], how='left')
 
-# Fill NaN values with 0
+# Fill NaN values with 0 for 'Outstanding Over 5 Weeks'
 percentage_per_club_date['Outstanding Over 5 Weeks'] = percentage_per_club_date['Outstanding Over 5 Weeks'].fillna(0)
 
 # Calculate percentage
 percentage_per_club_date['Percentage Over 5 Weeks Old (%)'] = (percentage_per_club_date['Outstanding Over 5 Weeks'] / percentage_per_club_date['Total Orders']) * 100
 
-# Round percentage to two decimal places
-percentage_per_club_date['Percentage Over 5 Weeks Old (%)'] = percentage_per_club_date['Percentage Over 5 Weeks Old (%)'].round(2)
+# Round percentage to one decimal place
+percentage_per_club_date['Percentage Over 5 Weeks Old (%)'] = percentage_per_club_date['Percentage Over 5 Weeks Old (%)'].round(1)
 
 # Calculate shipped orders per club per report date
 shipped_orders_per_club_date = data[data['Shipped Quantity'] > 0].groupby(['Club', 'Report Date'])['Order ID'].nunique().reset_index(name='Shipped Orders')
@@ -509,7 +548,7 @@ shipped_orders_per_club_date = data[data['Shipped Quantity'] > 0].groupby(['Club
 # Merge with the existing percentage_per_club_date
 percentage_per_club_date = pd.merge(percentage_per_club_date, shipped_orders_per_club_date, on=['Club', 'Report Date'], how='left')
 
-# Fill NaN shipped orders with 0
+# Fill NaN shipped orders with 0 and convert to int
 percentage_per_club_date['Shipped Orders'] = percentage_per_club_date['Shipped Orders'].fillna(0).astype(int)
 
 # Select relevant columns
@@ -537,8 +576,6 @@ percentage_pivot.columns = ['Club'] + [col for col in percentage_pivot.columns i
 
 # Reorder columns to have 'Club' first, followed by sorted report dates with metrics
 sorted_report_dates_strings = sorted(report_date_strings)
-
-# Create a list for new column order with alternating Percentage, Total, and Shipped
 new_column_order = ['Club']
 for date in sorted_report_dates_strings:
     pct_col = f"{date} Percentage Over 5 Weeks Old (%)"
@@ -581,10 +618,50 @@ numerical_cols_percentage_table.remove('Club')
 # Apply rounding
 percentage_pivot[numerical_cols_percentage_table] = percentage_pivot[numerical_cols_percentage_table].round(2)
 
-# Apply formatting using Pandas Styler
-styled_percentage_pivot = percentage_pivot.style.format({
-    col: "{:.2f}" for col in numerical_cols_percentage_table
-})
+# -------------------------- Style the Percentage Table -------------------------- #
+
+def highlight_percentage(val):
+    """
+    Highlights the percentage cells in blue.
+    """
+    if isinstance(val, float) or isinstance(val, int):
+        return 'background-color: lightblue'
+    return ''
+
+def highlight_total(val):
+    """
+    Highlights the total orders cells in light green.
+    """
+    if isinstance(val, int):
+        return 'background-color: lightgreen'
+    return ''
+
+def highlight_shipped(val):
+    """
+    Highlights the shipped orders cells in light coral.
+    """
+    if isinstance(val, int):
+        return 'background-color: lightcoral'
+    return ''
+
+# Apply styles using Pandas Styler
+styled_percentage_pivot = percentage_pivot.style \
+    .applymap(highlight_percentage, subset=pd.IndexSlice[:, percentage_pivot.columns.str.endswith('%')]) \
+    .applymap(highlight_total, subset=pd.IndexSlice[:, percentage_pivot.columns.str.endswith('Total')]) \
+    .applymap(highlight_shipped, subset=pd.IndexSlice[:, percentage_pivot.columns.str.endswith('Shipped')]) \
+    .set_properties(**{
+        'text-align': 'center',
+        'border': '1px solid black'
+    }) \
+    .set_table_styles([
+        {'selector': 'th', 'props': [('position', 'sticky'), ('top', '0'), ('background-color', '#f2f2f2'), ('z-index', '2')]}
+    ]) \
+    .format({
+        # Percentage columns: format as "{:.2f}%"
+        **{col: "{:.2f}%" for col in percentage_pivot.columns if col.endswith('%')},
+        # Total and Shipped columns: format as integers "{:,}"
+        **{col: "{:,}" for col in percentage_pivot.columns if col.endswith('Total') or col.endswith('Shipped')}
+    })
 
 # Display the styled percentage pivot table
 st.write(styled_percentage_pivot)
@@ -789,11 +866,7 @@ fig_avg_order_time_club.update_layout(
 st.plotly_chart(fig_avg_order_time_club, use_container_width=True)
 logger.info("Plotted Average Order Time by Club using Plotly")
 
-# -------------------------- Final Touches -------------------------- #
 
-# You can add additional sections or features as needed.
-
-# -------------------------- End of File -------------------------- #
 # # overallanalysis.py
 #
 # import streamlit as st
@@ -1255,12 +1328,13 @@ logger.info("Plotted Average Order Time by Club using Plotly")
 # display_ship_and_open = ship_and_open_df.copy()
 # display_ship_and_open['Report Date'] = display_ship_and_open['Report Date'].dt.strftime('%Y-%m-%d')
 # display_ship_and_open['Total Open Orders Over 5 Weeks'] = display_ship_and_open['Total Open Orders Over 5 Weeks'].astype(int)
-# display_ship_and_open['Cumulative Shipped Orders'] = display_ship_and_open['Cumulative Shipped Orders'].astype(int)
 # display_ship_and_open['% Open Orders Over 5 Weeks'] = display_ship_and_open['% Open Orders Over 5 Weeks'].round(2)
+#
+# # **Remove 'Cumulative Shipped Orders' column as per user request**
+# display_ship_and_open = display_ship_and_open[['Report Date', 'Total Open Orders Over 5 Weeks', '% Open Orders Over 5 Weeks']]
 #
 # # Apply formatting
 # formatted_ship_and_open = display_ship_and_open.style.format({
-#     # 'Cumulative Shipped Orders': "{:,}",
 #     'Total Open Orders Over 5 Weeks': "{:,}",
 #     '% Open Orders Over 5 Weeks': "{:.2f}%"
 # })
@@ -1269,7 +1343,7 @@ logger.info("Plotted Average Order Time by Club using Plotly")
 #
 # st.subheader("Shipped Orders and Open Orders Over 5 Weeks Old by Report Date")
 # st.write("""
-# This table shows, for each report date, the **cumulative number of shipped orders since May 1**, the **total number of open orders over five weeks old**, and the **percentage of open orders over five weeks old**.
+# This table shows, for each report date, the **total number of open orders over five weeks old**, and the **percentage of open orders over five weeks old**.
 # """)
 # st.dataframe(formatted_ship_and_open)
 #
@@ -1368,12 +1442,17 @@ logger.info("Plotted Average Order Time by Club using Plotly")
 # existing_columns = [col for col in new_column_order if col in percentage_pivot.columns]
 # percentage_pivot = percentage_pivot[existing_columns]
 #
-# # Apply formatting to percentage columns
-# percentage_cols = [col for col in percentage_pivot.columns if '%' in col]
+# # **Round all numerical columns to two decimal places as per user request**
+# # Identify numerical columns (all except 'Club')
+# numerical_cols_percentage_table = percentage_pivot.columns.tolist()
+# numerical_cols_percentage_table.remove('Club')
+#
+# # Apply rounding
+# percentage_pivot[numerical_cols_percentage_table] = percentage_pivot[numerical_cols_percentage_table].round(2)
 #
 # # Apply formatting using Pandas Styler
 # styled_percentage_pivot = percentage_pivot.style.format({
-#     col: "{:.2f}%" for col in percentage_cols
+#     col: "{:.2f}" for col in numerical_cols_percentage_table
 # })
 #
 # # Display the styled percentage pivot table
@@ -1549,11 +1628,14 @@ logger.info("Plotted Average Order Time by Club using Plotly")
 # average_order_time['Time Difference'] = average_order_time['Time Difference'].round(2)
 # average_order_time.rename(columns={'Order ID': 'Number of Orders Shipped'}, inplace=True)
 #
+# # **Round all numerical columns to two decimal places as per user request**
+# average_order_time['Number of Orders Shipped'] = average_order_time['Number of Orders Shipped'].astype(float).round(2)
+#
 # # Display the table
 # st.dataframe(average_order_time.style.format({
 #     'Club': lambda x: x.title(),
 #     'Time Difference': "{:.2f} days",
-#     'Number of Orders Shipped': "{:,}"
+#     'Number of Orders Shipped': "{:.2f}"
 # }))
 #
 # # Plot Average Order Time by Club
