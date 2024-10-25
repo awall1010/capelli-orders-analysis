@@ -1,15 +1,17 @@
-# capelli_orders_app.py
+# overallanalysis.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import os  # To handle local file operations
+import os
 import logging
 from logging.handlers import RotatingFileHandler
 import faulthandler
-import tempfile  # For cross-platform temporary file handling
+import tempfile
 import plotly.express as px
+import plotly.graph_objects as go
+from itertools import product  # For combinations
 
 # Enable faulthandler to get tracebacks on segmentation faults
 faulthandler.enable()
@@ -201,6 +203,51 @@ def load_data_from_directory(data_dir):
 DATA_DIR = 'reports'  # Ensure this directory exists in your repository
 data, report_dates_set = load_data_from_directory(DATA_DIR)
 
+# -------------------------- Shipping Data Loading and Processing -------------------------- #
+
+@st.cache_data(show_spinner=False)
+def load_shipping_data(shipping_dir):
+    """
+    Loads and processes the shipping data from the specified directory.
+
+    Parameters:
+    - shipping_dir (str): Path to the directory containing shipping data files.
+
+    Returns:
+    - pd.DataFrame: Processed shipping data.
+    """
+    logger.info(f"Loading shipping data from directory: {shipping_dir}")
+    if not os.path.exists(shipping_dir):
+        st.error(f"The shipping data directory '{shipping_dir}' does not exist. Please ensure it is present.")
+        logger.error(f"Shipping data directory '{shipping_dir}' does not exist.")
+        return pd.DataFrame()
+
+    # Exclude hidden files and temporary .icloud files
+    shipping_files = [f for f in os.listdir(shipping_dir)
+                      if f.endswith('.csv') and not f.startswith('.') and not f.endswith('.icloud')]
+
+    if not shipping_files:
+        st.error(f"No valid CSV files found in the '{shipping_dir}' directory. Please add the required data files.")
+        logger.error(f"No valid CSV files found in '{shipping_dir}'.")
+        return pd.DataFrame()
+
+    # For simplicity, assuming there is only one relevant file
+    shipping_file = shipping_files[0]
+    file_path = os.path.join(shipping_dir, shipping_file)
+    try:
+        shipping_data = pd.read_csv(file_path)
+        logger.info(f"Successfully read shipping data file: {shipping_file}")
+    except Exception as e:
+        st.warning(f"Error reading {shipping_file}: {e}")
+        logger.error(f"Error reading {shipping_file}: {e}")
+        return pd.DataFrame()
+
+    return shipping_data
+
+# Load the shipping data
+SHIPPING_DIR = 'shippingdates'  # Ensure this directory exists
+shipping_data = load_shipping_data(SHIPPING_DIR)
+
 # -------------------------- Data Preprocessing -------------------------- #
 
 # Identify and display rows with missing Report Date
@@ -263,6 +310,59 @@ logger.info(f"Unique Order Categories: {unique_order_categories}")
 # Ensure 'Order ID' is of type string to prevent issues during merging
 data['Order ID'] = data['Order ID'].astype(str)
 
+# -------------------------- Merge Shipping Data into Orders Data -------------------------- #
+
+if not shipping_data.empty:
+    # Ensure necessary columns are present in shipping_data
+    required_columns_shipping = ['Customer Reference', 'Club Name', 'Shipping Date', 'Date Created']
+    if not all(col in shipping_data.columns for col in required_columns_shipping):
+        st.error(f"The shipping data file must contain the following columns: {', '.join(required_columns_shipping)}")
+        logger.error(f"Shipping data missing required columns: {required_columns_shipping}")
+    else:
+        # Convert 'Shipping Date' and 'Date Created' to datetime
+        shipping_data['Shipping Date'] = pd.to_datetime(shipping_data['Shipping Date'], errors='coerce')
+        shipping_data['Date Created'] = pd.to_datetime(shipping_data['Date Created'], errors='coerce')
+        # Remove entries with invalid dates
+        shipping_data = shipping_data.dropna(subset=['Shipping Date', 'Date Created'])
+
+        # Remove duplicates of 'Customer Reference' by aggregating
+        order_data = shipping_data.groupby('Customer Reference', as_index=False).agg({
+            'Club Name': 'first',         # Assuming 'Club Name' is consistent within an order
+            'Date Created': 'min',        # Earliest creation date among items
+            'Shipping Date': 'max'        # Latest shipping date among items
+        })
+
+        # Compute time difference in days for each order
+        order_data['Time Difference'] = (order_data['Shipping Date'] - order_data['Date Created']).dt.days
+
+        # Assuming 'Customer Reference' corresponds to 'Order ID' in 'data'
+        # Rename 'Customer Reference' to 'Order ID' for merging
+        order_data.rename(columns={'Customer Reference': 'Order ID'}, inplace=True)
+
+        # **Convert 'Order ID' in 'order_data' to string**
+        order_data['Order ID'] = order_data['Order ID'].astype(str)
+
+        # Check data types before merging
+        st.write("Data 'Order ID' dtype:", data['Order ID'].dtype)
+        st.write("Order Data 'Order ID' dtype:", order_data['Order ID'].dtype)
+
+        # Merge 'order_data' into 'data' on 'Order ID'
+        try:
+            data = pd.merge(data, order_data[['Order ID', 'Time Difference']], on='Order ID', how='left')
+            logger.info("Merged 'Time Difference' into main orders data.")
+        except ValueError as ve:
+            st.error(f"Merge Error: {ve}")
+            logger.error(f"Merge Error: {ve}")
+            st.stop()
+
+        # Fill missing 'Time Difference' with 0 or appropriate value
+        data['Time Difference'] = data['Time Difference'].fillna(0).astype(int)
+else:
+    st.warning("No shipping data available to merge with orders data.")
+    logger.warning("Shipping data is empty or not loaded.")
+
+# -------------------------- Get List of Clubs and Report Dates -------------------------- #
+
 # Get the list of clubs
 clubs = data['Club'].dropna().unique()
 clubs = sorted(clubs)
@@ -287,22 +387,11 @@ logger.info(f"Sorted report dates: {sorted_report_dates}")
 
 st.sidebar.header("Filter Options")
 
+# **Removed Date Range Select Dropdown**
+# If there was a date range select dropdown, it has been removed to simplify the interface.
+
 # Selection box for club
 selected_club = st.sidebar.selectbox("Select Club", options=['All Clubs'] + list(clubs))
-
-# Selection boxes for start and end dates
-selected_start_date = st.sidebar.selectbox("Select Start Date", options=report_date_strings, index=0, key='start_date')
-selected_end_date = st.sidebar.selectbox("Select End Date", options=report_date_strings, index=len(report_date_strings)-1, key='end_date')
-
-# Convert selected dates back to datetime
-start_date = pd.to_datetime(selected_start_date)
-end_date = pd.to_datetime(selected_end_date)
-
-# Ensure start_date is before end_date
-if start_date > end_date:
-    st.error("Start date must be before end date.")
-    logger.error("Start date is after end date.")
-    st.stop()
 
 # -------------------------- Define Most Recent Report Date and Denominator Window -------------------------- #
 
@@ -446,7 +535,7 @@ styled_pivot = formatted_pivot.style.format("{:,}", subset=numeric_columns)
 # Display the styled pivot table using st.write()
 st.write(styled_pivot)
 
-# -------------------------- Plot Total Open Orders Over 5 Weeks Old by Report Date -------------------------- #
+# -------------------------- Plot Total Open Orders Over 5 Weeks Old -------------------------- #
 
 st.subheader("Trend of Total Open Orders Over 5 Weeks Old")
 st.write("This graph shows the total number of open orders over five weeks old across all clubs for each report date.")
@@ -470,7 +559,139 @@ fig_total_trend.update_layout(
 st.plotly_chart(fig_total_trend, use_container_width=True)
 logger.info("Plotted Trend of Total Open Orders Over 5 Weeks Old using Plotly")
 
-# -------------------------- Display Percentage Summary Table (Reintroduced) -------------------------- #
+# -------------------------- Orders Happening Over Time -------------------------- #
+
+st.subheader("Orders Happening Over Time")
+st.write("""
+This graph shows the number of orders happening over time based on shipping dates, grouped by week.
+""")
+
+if not shipping_data.empty and all(col in shipping_data.columns for col in ['Customer Reference', 'Club Name', 'Shipping Date', 'Date Created']):
+    # Convert 'Shipping Date' and 'Date Created' to datetime
+    shipping_data['Shipping Date'] = pd.to_datetime(shipping_data['Shipping Date'], errors='coerce')
+    shipping_data['Date Created'] = pd.to_datetime(shipping_data['Date Created'], errors='coerce')
+    # Remove entries with invalid dates
+    shipping_data = shipping_data.dropna(subset=['Shipping Date', 'Date Created'])
+
+    # Remove duplicates of 'Customer Reference' by aggregating
+    order_data_shipping = shipping_data.groupby('Customer Reference', as_index=False).agg({
+        'Club Name': 'first',         # Assuming 'Club Name' is consistent within an order
+        'Date Created': 'min',        # Earliest creation date among items
+        'Shipping Date': 'max'        # Latest shipping date among items
+    })
+
+    # Compute time difference in days for each order
+    order_data_shipping['Time Difference'] = (order_data_shipping['Shipping Date'] - order_data_shipping['Date Created']).dt.days
+
+    # Set 'Shipping Date' as index
+    order_data_shipping.set_index('Shipping Date', inplace=True)
+
+    # Group by week and count unique orders
+    orders_over_time_shipping = order_data_shipping.resample('W').size().reset_index(name='Unique Orders')
+
+    # Sort by 'Shipping Date'
+    orders_over_time_shipping = orders_over_time_shipping.sort_values('Shipping Date')
+
+    # Plot the number of orders over time
+    fig_orders_over_time = px.line(
+        orders_over_time_shipping,
+        x='Shipping Date',
+        y='Unique Orders',
+        markers=True,
+        title='Orders Happening Over Time (Weekly)',
+        labels={'Shipping Date': 'Week Starting', 'Unique Orders': 'Number of Orders'}
+    )
+    fig_orders_over_time.update_layout(
+        xaxis=dict(tickangle=45),
+        yaxis=dict(title='Number of Orders'),
+        template='plotly_white'
+    )
+    st.plotly_chart(fig_orders_over_time, use_container_width=True)
+    logger.info("Plotted Orders Happening Over Time (Weekly) using Plotly")
+else:
+    st.write("No shipping data available to display orders over time.")
+    logger.warning("Shipping data is empty or missing required columns.")
+
+# -------------------------- Shipping Time for Each Order Over Time -------------------------- #
+
+st.subheader("Shipping Time for Each Order Over Time")
+st.write("""
+This graph shows how long it took for each order to ship, based on the shipping date over time.
+""")
+
+if not shipping_data.empty and all(col in shipping_data.columns for col in ['Customer Reference', 'Club Name', 'Shipping Date', 'Date Created']):
+    # Reset index to access 'Shipping Date' as a column
+    order_data_shipping.reset_index(inplace=True)
+
+    # Compute shipping times
+    shipping_times = order_data_shipping[['Shipping Date', 'Time Difference']]
+
+    # Plot using Plotly
+    fig_shipping_time = px.scatter(
+        shipping_times,
+        x='Shipping Date',
+        y='Time Difference',
+        title='Shipping Time for Each Order Over Time',
+        labels={'Shipping Date': 'Shipping Date', 'Time Difference': 'Shipping Time (days)'},
+        opacity=0.6,
+        hover_data=['Time Difference']
+    )
+
+    # Update layout for better readability
+    fig_shipping_time.update_layout(
+        template='plotly_white',
+        xaxis=dict(tickangle=45),
+        yaxis=dict(title='Shipping Time (days)')
+    )
+
+    st.plotly_chart(fig_shipping_time, use_container_width=True)
+    logger.info("Plotted Shipping Time for Each Order Over Time using Plotly")
+else:
+    st.write("No shipping data available to display shipping time graph.")
+    logger.warning("Shipping data is empty or missing required columns for shipping time graph.")
+
+# -------------------------- Shipping Time Distribution and Total Orders Shipped per Month -------------------------- #
+
+st.subheader("Average Shipping Time per Month")
+st.write("""
+This bar chart displays the **average shipping time (in days)** for each month.
+""")
+
+if not shipping_data.empty and all(col in shipping_data.columns for col in ['Customer Reference', 'Club Name', 'Shipping Date', 'Date Created']):
+    # Reset index to access 'Shipping Date' as a column
+    order_data_shipping.reset_index(inplace=True)
+
+    # Extract month and year for grouping
+    order_data_shipping['Shipping Month'] = order_data_shipping['Shipping Date'].dt.to_period('M').dt.to_timestamp()
+
+    # Compute average shipping time per month
+    avg_shipping_time_per_month = order_data_shipping.groupby('Shipping Month')['Time Difference'].mean().reset_index()
+
+    # Sort by Shipping Month
+    avg_shipping_time_per_month = avg_shipping_time_per_month.sort_values('Shipping Month')
+
+    # Plot the average shipping time per month as a bar chart
+    fig_avg_shipping = px.bar(
+        avg_shipping_time_per_month,
+        x='Shipping Month',
+        y='Time Difference',
+        title='Average Shipping Time per Month',
+        labels={'Shipping Month': 'Month', 'Time Difference': 'Average Shipping Time (days)'},
+        text='Time Difference'
+    )
+    fig_avg_shipping.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    fig_avg_shipping.update_layout(
+        xaxis=dict(tickangle=45),
+        yaxis=dict(title='Average Shipping Time (days)'),
+        template='plotly_white'
+    )
+    st.plotly_chart(fig_avg_shipping, use_container_width=True)
+    logger.info("Plotted Average Shipping Time per Month as a Bar Chart using Plotly")
+else:
+    st.write("No shipping data available to display the average shipping time per month.")
+    logger.warning("Shipping data is empty or missing required columns for average shipping time bar chart.")
+
+# -------------------------- Percentage Summary Table (Reintroduced) -------------------------- #
 
 st.subheader("Percentage of Open Orders Over 5 Weeks Old by Club and Report Date")
 st.write("""
@@ -478,7 +699,6 @@ This table shows the **percentage of open orders over five weeks old for each cl
 """)
 
 # Create a DataFrame of all combinations of clubs and report dates
-from itertools import product  # Import here as it's needed
 clubs_report_dates = pd.DataFrame(list(product(clubs, report_dates)), columns=['Club', 'Report Date'])
 
 # Compute the numerator: Number of 'Outstanding Over 5 Weeks' orders for each club at each report date
@@ -535,223 +755,50 @@ styled_percentage_pivot = percentage_pivot.style.format("{:.2f}%")
 # Display the styled pivot table
 st.write(styled_percentage_pivot)
 
-# -------------------------- Data Filtering -------------------------- #
+# -------------------------- Average Order Time by Club -------------------------- #
 
-# Filter data based on user selection
-if selected_club != 'All Clubs':
-    data_filtered = data[data['Club'] == selected_club]
-    logger.info(f"Filtered data for club: {selected_club}")
-else:
-    data_filtered = data.copy()
-    logger.info("Filtered data for All Clubs")
-
-# Modify the filtering to use 'Report Date' instead of 'Order Date'
-data_filtered = data_filtered[(data_filtered['Report Date'] >= start_date) & (data_filtered['Report Date'] <= end_date)]
-logger.info(f"Filtered data between {selected_start_date} and {selected_end_date} based on Report Date")
-
-# -------------------------- Detailed Analysis for Selected Club -------------------------- #
-
-if selected_club != 'All Clubs' and not data_filtered.empty:
-    st.subheader(f"Detailed Analysis for {selected_club}")
-    st.write(f"Here is a detailed analysis for **{selected_club}** based on the selected date range.")
-
-    # Summarize the findings
-    explanation = ""
-
-    # Current outstanding orders over 5 weeks old
-    latest_date = data_filtered['Report Date'].max()
-    if pd.isna(latest_date) or data_filtered.empty:
-        # Do not display "No data available" message
-        pass
-    else:
-        latest_data = data_filtered[data_filtered['Report Date'] == latest_date]
-        current_outstanding = latest_data[latest_data['Order Category'] == 'Outstanding Over 5 Weeks']['Order ID'].nunique()
-        explanation += f"As of {latest_date.strftime('%Y-%m-%d')}, **{selected_club}** has **{current_outstanding}** outstanding orders over 5 weeks old.\n\n"
-
-        # Trend over time
-        trend_over_time = data_filtered[data_filtered['Order Category'] == 'Outstanding Over 5 Weeks'].groupby('Report Date').size().reset_index(name='Open Orders Over 5 Weeks')
-        trend_over_time = trend_over_time.sort_values('Report Date')
-
-        # Interpret whether the situation is getting better or worse
-        if not trend_over_time.empty:
-            if trend_over_time['Open Orders Over 5 Weeks'].is_monotonic_decreasing:
-                explanation += f"The number of outstanding orders over 5 weeks old for **{selected_club}** is decreasing over time, indicating an improvement.\n\n"
-            elif trend_over_time['Open Orders Over 5 Weeks'].is_monotonic_increasing:
-                explanation += f"The number of outstanding orders over 5 weeks old for **{selected_club}** is increasing over time, indicating a worsening situation.\n\n"
-            else:
-                explanation += f"The number of outstanding orders over 5 weeks old for **{selected_club}** fluctuates over time.\n\n"
-        else:
-            # Do not display "No data available" message
-            pass
-
-        st.write(explanation)
-
-        # Plot the trend for the selected club using Plotly
-        st.subheader(f"Trend of Outstanding Orders Over 5 Weeks Old for {selected_club}")
-        st.write("This graph shows how the number of outstanding orders over 5 weeks old has changed over time for the selected club.")
-
-        if not trend_over_time.empty:
-            fig4 = px.line(
-                trend_over_time,
-                x='Report Date',
-                y='Open Orders Over 5 Weeks',
-                markers=True,
-                title=f'Outstanding Orders Over 5 Weeks Old Over Time for {selected_club}',
-                labels={'Report Date': 'Report Date', 'Open Orders Over 5 Weeks': 'Number of Outstanding Orders'}
-            )
-            fig4.update_layout(
-                xaxis=dict(tickangle=45),
-                yaxis=dict(title='Number of Outstanding Orders'),
-                template='plotly_white'
-            )
-            st.plotly_chart(fig4, use_container_width=True)
-            logger.info(f"Plotted Trend for {selected_club} using Plotly")
-        else:
-            # Do not display "No data available" message
-            pass
-
-        # Provide an interpretation paragraph
-        st.write("**Interpretation:**")
-        st.write(f"""
-        The data indicates changes in the number of open or partially shipped orders over five weeks old for **{selected_club}**. By analyzing the trend, we can assess the club's order processing efficiency. An increasing trend suggests a backlog forming, while a decreasing trend indicates progress in reducing overdue orders.
-        """)
-else:
-    # Do not display "No data available" message
-    pass
-
-# -------------------------- New Graphs: Orders Happening Over Time and Shipping Times -------------------------- #
-
-st.subheader("Orders Happening Over Time")
-
+st.subheader("Average Order Time by Club")
 st.write("""
-This graph shows the number of orders happening over time based on shipping dates, grouped by week.
+This table displays the **average shipping time (in days)** for each club, along with the **number of orders shipped by each club**.
 """)
 
-# Load the new data from 'shippingdates' subdirectory
-def load_shipping_data(shipping_dir):
-    """
-    Loads and processes the shipping data from the specified directory.
+# Compute average shipping time per club and number of orders shipped
+average_order_time = data.groupby('Club').agg({
+    'Time Difference': 'mean',
+    'Order ID': 'count'
+}).reset_index()
+average_order_time['Time Difference'] = average_order_time['Time Difference'].round(2)
+average_order_time.rename(columns={'Order ID': 'Number of Orders Shipped'}, inplace=True)
 
-    Parameters:
-    - shipping_dir (str): Path to the directory containing shipping data files.
+# Display the table
+st.dataframe(average_order_time.style.format({
+    'Club': lambda x: x.title(),
+    'Time Difference': "{:.2f} days",
+    'Number of Orders Shipped': "{:,}"
+}))
 
-    Returns:
-    - pd.DataFrame: Processed shipping data.
-    """
-    logger.info(f"Loading shipping data from directory: {shipping_dir}")
-    if not os.path.exists(shipping_dir):
-        st.error(f"The shipping data directory '{shipping_dir}' does not exist. Please ensure it is present.")
-        logger.error(f"Shipping data directory '{shipping_dir}' does not exist.")
-        return pd.DataFrame()
+# Plot Average Order Time by Club
+fig_avg_order_time_club = px.bar(
+    average_order_time,
+    x='Club',
+    y='Time Difference',
+    title='Average Shipping Time by Club',
+    labels={'Club': 'Club', 'Time Difference': 'Average Shipping Time (days)'},
+    text='Time Difference'
+)
+fig_avg_order_time_club.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+fig_avg_order_time_club.update_layout(
+    xaxis=dict(tickangle=45),
+    yaxis=dict(title='Average Shipping Time (days)'),
+    uniformtext_minsize=8,
+    uniformtext_mode='hide',
+    template='plotly_white'
+)
+st.plotly_chart(fig_avg_order_time_club, use_container_width=True)
+logger.info("Plotted Average Order Time by Club using Plotly")
 
-    # Exclude hidden files and temporary .icloud files
-    shipping_files = [f for f in os.listdir(shipping_dir)
-                      if f.endswith('.csv') and not f.startswith('.') and not f.endswith('.icloud')]
+# -------------------------- Final Touches -------------------------- #
 
-    if not shipping_files:
-        st.error(f"No valid CSV files found in the '{shipping_dir}' directory. Please add the required data files.")
-        logger.error(f"No valid CSV files found in '{shipping_dir}'.")
-        return pd.DataFrame()
+# You can add additional sections or features as needed.
 
-    # For simplicity, assuming there is only one relevant file
-    shipping_file = shipping_files[0]
-    file_path = os.path.join(shipping_dir, shipping_file)
-    try:
-        shipping_data = pd.read_csv(file_path)
-        logger.info(f"Successfully read shipping data file: {shipping_file}")
-    except Exception as e:
-        st.warning(f"Error reading {shipping_file}: {e}")
-        logger.error(f"Error reading {shipping_file}: {e}")
-        return pd.DataFrame()
-
-    return shipping_data
-
-# Load the shipping data
-SHIPPING_DIR = 'shippingdates'  # Ensure this directory exists
-shipping_data = load_shipping_data(SHIPPING_DIR)
-
-if not shipping_data.empty:
-    # Ensure necessary columns are present
-    required_columns = ['Customer Reference', 'Club Name', 'Shipping Date', 'Date Created']
-    if not all(col in shipping_data.columns for col in required_columns):
-        st.error(f"The shipping data file must contain the following columns: {', '.join(required_columns)}")
-        logger.error(f"Shipping data missing required columns: {required_columns}")
-    else:
-        # Convert 'Shipping Date' and 'Date Created' to datetime
-        shipping_data['Shipping Date'] = pd.to_datetime(shipping_data['Shipping Date'], errors='coerce')
-        shipping_data['Date Created'] = pd.to_datetime(shipping_data['Date Created'], errors='coerce')
-        # Remove entries with invalid dates
-        shipping_data = shipping_data.dropna(subset=['Shipping Date', 'Date Created'])
-
-        # **Process the data before any analysis**
-        # Remove duplicates of 'Customer Reference' by aggregating
-        order_data = shipping_data.groupby('Customer Reference', as_index=False).agg({
-            'Club Name': 'first',         # Assuming 'Club Name' is consistent within an order
-            'Date Created': 'min',        # Earliest creation date among items
-            'Shipping Date': 'max'        # Latest shipping date among items
-        })
-
-        # Compute time difference in days for each order
-        order_data['Time Difference'] = (order_data['Shipping Date'] - order_data['Date Created']).dt.days
-
-        # **Proceed with the analysis using 'order_data'**
-
-        # Set 'Shipping Date' as index
-        order_data.set_index('Shipping Date', inplace=True)
-
-        # Group by week and count unique orders
-        orders_over_time = order_data.resample('W').size().reset_index(name='Unique Orders')
-        # Sort by 'Shipping Date'
-        orders_over_time = orders_over_time.sort_values('Shipping Date')
-
-        # Plot the number of orders over time
-        fig_orders_over_time = px.line(
-            orders_over_time,
-            x='Shipping Date',
-            y='Unique Orders',
-            markers=True,
-            title='Orders Happening Over Time (Weekly)',
-            labels={'Shipping Date': 'Week Starting', 'Unique Orders': 'Number of Orders'}
-        )
-        fig_orders_over_time.update_layout(
-            xaxis=dict(tickangle=45),
-            yaxis=dict(title='Number of Orders'),
-            template='plotly_white'
-        )
-        st.plotly_chart(fig_orders_over_time, use_container_width=True)
-        logger.info("Plotted Orders Happening Over Time (Weekly) using Plotly")
-
-        # Plot shipping time for each order over time
-        st.subheader("Shipping Time for Each Order Over Time")
-        st.write("""
-        This graph shows how long it took for each order to ship, based on the shipping date over time.
-        """)
-
-        # Reset index to access 'Shipping Date' as a column
-        order_data.reset_index(inplace=True)
-
-        # Compute the overall average shipping time
-        overall_avg_shipping_time = order_data['Time Difference'].mean().round(2)
-
-        # Display the overall average shipping time
-        st.markdown(f"### **Average Shipping Time Across All Orders: {overall_avg_shipping_time} days**")
-
-        # Create a scatter plot of shipping time per order over time
-        fig_shipping_times = px.scatter(
-            order_data,
-            x='Shipping Date',
-            y='Time Difference',
-            title='Shipping Time for Each Order Over Time',
-            labels={'Shipping Date': 'Shipping Date', 'Time Difference': 'Shipping Time (days)'},
-            hover_data=['Customer Reference', 'Club Name']
-        )
-        fig_shipping_times.update_layout(
-            xaxis=dict(tickangle=45),
-            yaxis=dict(title='Shipping Time (days)'),
-            template='plotly_white'
-        )
-        st.plotly_chart(fig_shipping_times, use_container_width=True)
-        logger.info("Plotted Shipping Time for Each Order Over Time using Plotly")
-else:
-    st.write("No shipping data available to display orders over time.")
-    logger.warning("Shipping data is empty or not loaded.")
+# -------------------------- End of File -------------------------- #
