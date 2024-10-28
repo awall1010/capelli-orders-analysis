@@ -1,10 +1,10 @@
-# shipping_date_analysis.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import os
 import plotly.express as px
+from itertools import cycle
 
 # -------------------------- Streamlit App Setup -------------------------- #
 
@@ -95,7 +95,159 @@ if selected_club != 'All Clubs':
 else:
     filtered_df = df.copy()
 
-# -------------------------- Percentage of Orders Over 5 Weeks per Club -------------------------- #
+# -------------------------- Percentage and Count of Orders Shipped Within 5 Weeks per Club -------------------------- #
+
+if selected_club == 'All Clubs':
+    st.subheader("Percentage and Count of Orders Shipped Within 5 Weeks per Club (Month Over Month)")
+    st.write("""
+    This table displays each club and, for each month, the percentage and count of orders shipped within and over 5 weeks.
+    """)
+
+    # Ensure there are shipping dates to calculate percentages
+    if not filtered_df['Shipping Date'].isna().all():
+        within_5_weeks_df = filtered_df.dropna(subset=['Shipping Date', 'Time to Ship']).copy()
+
+        if within_5_weeks_df.empty:
+            st.write("No shipping time data available to display percentage and count analysis.")
+        else:
+            # Extract Shipping Month as 'YYYY-MM' string
+            within_5_weeks_df['Shipping Month'] = within_5_weeks_df['Shipping Date'].dt.to_period('M').dt.strftime('%Y-%m')
+
+            # Group by Club and Shipping Month
+            grouped_within = within_5_weeks_df.groupby(['Club Name', 'Shipping Month'])
+
+            # Calculate total orders per club per month
+            total_orders_club_month = grouped_within.size().reset_index(name='Total Orders Shipped')
+
+            # Calculate orders shipped under 5 weeks
+            under_5_weeks_club_month = grouped_within.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+
+            # Calculate orders shipped over 5 weeks
+            over_5_weeks_club_month = grouped_within.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+
+            # Merge the summaries
+            within_summary = pd.merge(total_orders_club_month, under_5_weeks_club_month, on=['Club Name', 'Shipping Month'])
+            within_summary = pd.merge(within_summary, over_5_weeks_club_month, on=['Club Name', 'Shipping Month'])
+
+            # Calculate percentages
+            within_summary['% Shipped Within 5 Weeks'] = (
+                within_summary['Orders Shipped Under 5 Weeks'] / within_summary['Total Orders Shipped'] * 100
+            ).round(2)
+
+            within_summary['% Shipped Over 5 Weeks'] = (
+                within_summary['Orders Shipped Over 5 Weeks'] / within_summary['Total Orders Shipped'] * 100
+            ).round(2)
+
+            # Pivot the table
+            pivot_within = within_summary.pivot(index='Club Name', columns='Shipping Month', values=['% Shipped Within 5 Weeks', '% Shipped Over 5 Weeks', 'Orders Shipped Under 5 Weeks', 'Orders Shipped Over 5 Weeks'])
+
+            # Flatten the MultiIndex columns
+            pivot_within.columns = [f"{col[1]} {col[0]}" for col in pivot_within.columns]
+
+            # Fill NaN with 0
+            pivot_within = pivot_within.fillna(0)
+
+            # Reset index to have 'Club Name' as a column
+            pivot_within.reset_index(inplace=True)
+
+            # Define a list of subdued colors for the months
+            color_list = [
+                '#D3D3D3',  # LightGray
+                '#B0C4DE',  # LightSteelBlue
+                '#98FB98',  # PaleGreen
+                '#FFFACD',  # LemonChiffon
+                '#E6E6FA',  # Lavender
+                '#FFDAB9',  # PeachPuff
+                '#F0E68C',  # Khaki
+                '#AFEEEE',  # PaleTurquoise
+                '#FFDEAD',  # NavajoWhite
+                '#E0FFFF',  # LightCyan
+                '#F5DEB3',  # Wheat
+                '#FFE4E1',  # MistyRose
+                '#F0FFF0',  # Honeydew
+                '#FFF0F5',  # LavenderBlush
+                '#F8F8FF',  # GhostWhite
+                '#FFEBCD',  # BlanchedAlmond
+                '#F5F5DC',  # Beige
+                '#FFEFD5',  # PapayaWhip
+                '#F0FFF0',  # Honeydew
+                '#FAFAD2',  # LightGoldenrodYellow
+                '#FFF5EE',  # Seashell
+                '#FDF5E6',  # OldLace
+                '#FFF8DC',  # Cornsilk
+                '#F0FFFF',  # Azure
+                '#FFF0F5'   # LavenderBlush
+            ]
+
+            # Assign colors to each month set of four columns
+            months = sorted(within_summary['Shipping Month'].unique())
+            color_cycle = cycle(color_list)
+            month_colors = {month: next(color_cycle) for month in months}
+
+            # Create a dictionary to map each column to its corresponding color based on month
+            column_color_mapping = {}
+            for month in months:
+                column_color_mapping[f"{month} % Shipped Within 5 Weeks"] = month_colors[month]
+                column_color_mapping[f"{month} % Shipped Over 5 Weeks"] = month_colors[month]
+                column_color_mapping[f"{month} Orders Shipped Under 5 Weeks"] = month_colors[month]
+                column_color_mapping[f"{month} Orders Shipped Over 5 Weeks"] = month_colors[month]
+
+            # Define a function to apply background color based on column
+            def highlight_columns(row):
+                styles = []
+                for col in row.index:
+                    if col == 'Club Name':
+                        # Apply distinct style for 'Club Name'
+                        styles.append('background-color: #f2f2f2; color: black; text-align: center; font-weight: bold;')
+                    else:
+                        # Apply color based on month
+                        bg_color = column_color_mapping.get(col, '')
+                        if 'Shipped Within' in col or 'Shipped Over' in col:
+                            styles.append(f'background-color: {bg_color}; color: black; text-align: center;')
+                        else:
+                            # For count columns, keep the same background but maybe different text formatting
+                            styles.append(f'background-color: {bg_color}; color: black; text-align: center;')
+                return styles
+
+            # Apply the styling
+            styled_pivot_within = pivot_within.style.format({
+                **{col: "{:.2f}%" for col in pivot_within.columns if 'Shipped Within' in col or 'Shipped Over' in col},
+                **{col: "{:,}" for col in pivot_within.columns if 'Orders Shipped' in col}
+            }).apply(highlight_columns, axis=1)
+
+            # -------------------------- Reorder Columns -------------------------- #
+
+            # Initialize the desired order with 'Club Name'
+            desired_order = ['Club Name']
+
+            # Iterate through each month and append the four metrics in the specified order
+            for month in months:
+                desired_order.extend([
+                    f"{month} % Shipped Within 5 Weeks",
+                    f"{month} % Shipped Over 5 Weeks",
+                    f"{month} Orders Shipped Under 5 Weeks",
+                    f"{month} Orders Shipped Over 5 Weeks"
+                ])
+
+            # Add any additional columns that might exist but are not part of the desired order
+            additional_cols = [col for col in pivot_within.columns if col not in desired_order]
+            desired_order.extend(additional_cols)
+
+            # Reorder the DataFrame columns
+            pivot_within = pivot_within[desired_order]
+
+            # Reapply the styling after reordering
+            styled_pivot_within = pivot_within.style.format({
+                **{col: "{:.2f}%" for col in pivot_within.columns if 'Shipped Within' in col or 'Shipped Over' in col},
+                **{col: "{:,}" for col in pivot_within.columns if 'Orders Shipped' in col}
+            }).apply(highlight_columns, axis=1)
+
+            # Display the table
+            st.dataframe(styled_pivot_within, use_container_width=True)
+    else:
+        st.empty()  # Do nothing if a specific club is selected
+
+# -------------------------- Percentage of Orders Over 5 Weeks -------------------------- #
 
 st.subheader("Percentage of Orders Over 5 Weeks (Month Over Month)")
 st.write("""
@@ -109,8 +261,8 @@ if not filtered_df['Shipping Date'].isna().all():
     if percentage_df.empty:
         st.write("No shipping time data available to display percentage analysis.")
     else:
-        # Extract Shipping Month
-        percentage_df['Shipping Month'] = percentage_df['Shipping Date'].dt.to_period('M').dt.to_timestamp()
+        # Extract Shipping Month as 'YYYY-MM' string
+        percentage_df['Shipping Month'] = percentage_df['Shipping Date'].dt.to_period('M').dt.strftime('%Y-%m')
 
         # Group by Shipping Month
         grouped = percentage_df.groupby('Shipping Month')
@@ -138,7 +290,7 @@ if not filtered_df['Shipping Date'].isna().all():
         ).round(2)
 
         # Format Shipping Month as string for better display
-        percentage_summary['Shipping Month'] = percentage_summary['Shipping Month'].dt.strftime('%Y-%m')
+        percentage_summary['Shipping Month'] = percentage_summary['Shipping Month'].astype(str)
 
         # Rename columns for clarity
         percentage_summary.rename(columns={'Shipping Month': 'Month'}, inplace=True)
@@ -200,8 +352,8 @@ if not filtered_df['Shipping Date'].isna().all():
     if count_df.empty:
         st.write("No shipping time data available to display count analysis.")
     else:
-        # Extract Shipping Month
-        count_df['Shipping Month'] = count_df['Shipping Date'].dt.to_period('M').dt.to_timestamp()
+        # Extract Shipping Month as 'YYYY-MM' string
+        count_df['Shipping Month'] = count_df['Shipping Date'].dt.to_period('M').dt.strftime('%Y-%m')
 
         # Group by Shipping Month
         grouped_counts = count_df.groupby('Shipping Month')
@@ -216,7 +368,7 @@ if not filtered_df['Shipping Date'].isna().all():
         counts_summary = pd.merge(under_5_weeks_counts, over_5_weeks_counts, on='Shipping Month')
 
         # Format Shipping Month as string for better display
-        counts_summary['Shipping Month'] = counts_summary['Shipping Month'].dt.strftime('%Y-%m')
+        counts_summary['Shipping Month'] = counts_summary['Shipping Month'].astype(str)
 
         # Rename columns for clarity
         counts_summary.rename(columns={'Shipping Month': 'Month'}, inplace=True)
@@ -322,8 +474,8 @@ if not filtered_df['Shipping Date'].isna().all():
     if orders_count_df.empty:
         st.write("No shipping data available to display orders count over time.")
     else:
-        # Extract Shipping Month
-        orders_count_df['Shipping Month'] = orders_count_df['Shipping Date'].dt.to_period('M').dt.to_timestamp()
+        # Extract Shipping Month as 'YYYY-MM' string
+        orders_count_df['Shipping Month'] = orders_count_df['Shipping Date'].dt.to_period('M').dt.strftime('%Y-%m')
 
         # Group by Shipping Month and count orders
         orders_per_month = orders_count_df.groupby('Shipping Month').size().reset_index(name='Number of Orders Shipped')
@@ -364,7 +516,7 @@ This section provides both a box plot and a bar chart showing the distribution a
 # Calculate average shipping time per month
 if not filtered_df['Shipping Date'].isna().all():
     avg_shipping_time_month = shipping_time_df.copy()
-    avg_shipping_time_month['Shipping Month'] = avg_shipping_time_month['Shipping Date'].dt.to_period('M').dt.to_timestamp()
+    avg_shipping_time_month['Shipping Month'] = avg_shipping_time_month['Shipping Date'].dt.to_period('M').dt.strftime('%Y-%m')
 
     # Box Plot
     fig_box = px.box(
@@ -444,3 +596,4 @@ st.dataframe(average_order_time.style.format({
 
 st.markdown("---")
 st.write("**Note:** This analysis is based on the data available in the `aggregated_orders.csv` file. Please ensure the data is up-to-date for accurate insights.")
+# shipping_date_analysis.py
