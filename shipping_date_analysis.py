@@ -97,7 +97,7 @@ else:
 
 # -------------------------- Percentage of Orders Over 5 Weeks per Club -------------------------- #
 
-st.subheader("Percentage of Orders Over 5 Weeks per Club (Month Over Month)")
+st.subheader("Percentage of Orders Over 5 Weeks (Month Over Month)")
 st.write("""
 This table shows the percentage of orders that took over 5 weeks to ship for each month.
 """)
