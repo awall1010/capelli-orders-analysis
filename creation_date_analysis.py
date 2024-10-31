@@ -506,9 +506,9 @@ else:
 
 # -------------------------- Number of Orders Shipped Over Time -------------------------- #
 
-st.subheader("Number of Orders Shipped Over Time")
+st.subheader("Number of Orders Placed Over Time")
 st.write("""
-This graph shows the number of orders shipped each month based on the order creation date.
+This graph shows the number of orders placed each month based on the order creation date.
 """)
 
 # Ensure there are date created to plot
