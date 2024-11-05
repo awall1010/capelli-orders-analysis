@@ -26,7 +26,7 @@ def load_data(filepath):
     Loads and preprocesses the aggregated orders data.
 
     Parameters:
-    - filepath (str): Path to the aggregated_orders10.28.csv file.
+    - filepath (str): Path to the aggregated_orders11.3.csv file.
 
     Returns:
     - pd.DataFrame: Preprocessed DataFrame.
