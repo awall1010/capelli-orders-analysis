@@ -618,7 +618,7 @@ else:
 
 st.subheader("Comparison of Orders and Average Shipping Time Over Time")
 st.write("""
-This visualization compares the total number of orders shipped each month with the average shipping time for those orders. It helps in understanding how order volumes influence shipping performance.
+This visualization compares the total number of orders created each month with the average shipping time for those orders. It helps in understanding how order volumes influence shipping performance.
 """)
 
 # Ensure there are date created to perform comparison analysis
@@ -658,7 +658,7 @@ if not filtered_df['Date Created'].isna().all():
 
     # Add figure title
     fig_comparison.update_layout(
-        title_text="Total Orders Shipped and Average Shipping Time Over Time"
+        title_text="Total Orders Created and Average Shipping Time Over Time"
     )
 
     # Set x-axis title
