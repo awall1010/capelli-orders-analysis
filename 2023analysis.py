@@ -604,7 +604,7 @@ else:
 
 st.subheader("Comparison of Orders and Average Shipping Time Over Time")
 st.write("""
-This visualization compares the total number of orders placed each month with the average shipping time for those orders. It helps in understanding how order volumes influence shipping performance.
+This visualization compares the total number of orders created each month with the average shipping time for those orders. It helps in understanding how order volumes influence shipping performance.
 """)
 
 # Ensure there are date created to perform comparison analysis
