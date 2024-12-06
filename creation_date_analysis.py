@@ -166,17 +166,21 @@ outstanding_over_35_days = outstanding_df[outstanding_df['Order Age'] > 35].shap
 percent_over_35_days = (outstanding_over_35_days / total_outstanding * 100) if total_outstanding > 0 else 0.0
 
 # Display Metrics in Two Columns
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.metric(
         label="Total Outstanding Orders",
         value=f"{total_outstanding:,}"
     )
-
 with col2:
     st.metric(
-        label="% of Outstanding Orders Over 35 Days",
+        label="Total Outstanding Orders Over 5 weeks",
+        value=f"{outstanding_over_35_days:,}"
+    )
+with col3:
+    st.metric(
+        label="% of Outstanding Orders Over 5 weeks",
         value=f"{percent_over_35_days:.2f}%"
     )
 
