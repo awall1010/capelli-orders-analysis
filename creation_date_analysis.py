@@ -1,4 +1,4 @@
-# shipping_date_analysis.py
+# creation_date_analysis.py
 
 import streamlit as st
 import pandas as pd
@@ -10,12 +10,17 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from datetime import datetime
 import logging
+import warnings
+
+# -------------------------- Suppress Specific Warnings -------------------------- #
+# It's generally better to fix the root cause, but you can suppress warnings temporarily
+warnings.simplefilter(action='ignore', category=DeprecationWarning)
 
 # -------------------------- Streamlit App Setup -------------------------- #
 
-st.set_page_config(page_title="Aggregated Orders Analysis", layout="wide")
+st.set_page_config(page_title="Creation Date Analysis", layout="wide")
 
-st.title("Aggregated Orders Analysis")
+st.title("Creation Date Analysis")
 st.write("""
 This application analyzes aggregated order data from the `aggregated_orders12.1.csv` file. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
@@ -134,20 +139,20 @@ else:
 
 # Uncomment the following block if you need to debug the data
 
-# st.sidebar.header("🔍 Debugging Information")
-# if st.sidebar.checkbox("Show Sales Order Header Status Details"):
-#     st.sidebar.subheader("Sales Order Header Status Details")
-#     status_counts = filtered_df['Sales Order Header Status'].value_counts()
-#     st.sidebar.write(status_counts)
-#
-#     st.sidebar.subheader("Example Entries")
-#     st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
+st.sidebar.header("🔍 Debugging Information")
+if st.sidebar.checkbox("Show Sales Order Header Status Details"):
+    st.sidebar.subheader("Sales Order Header Status Details")
+    status_counts = filtered_df['Sales Order Header Status'].value_counts()
+    st.sidebar.write(status_counts)
+
+    st.sidebar.subheader("Example Entries")
+    st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
 
 # -------------------------- Outstanding Orders Metrics -------------------------- #
 
 st.subheader("Outstanding Orders Metrics")
 st.write("""
-This section displays the total number of outstanding orders and the percentage of these orders that are over 35 days old.
+This section displays the total number of outstanding orders (where 'Sales Order Header Status' is 'OPEN') and the percentage of these orders that are over 35 days old.
 """)
 
 # Filter for outstanding orders
@@ -166,21 +171,17 @@ outstanding_over_35_days = outstanding_df[outstanding_df['Order Age'] > 35].shap
 percent_over_35_days = (outstanding_over_35_days / total_outstanding * 100) if total_outstanding > 0 else 0.0
 
 # Display Metrics in Two Columns
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     st.metric(
         label="Total Outstanding Orders",
         value=f"{total_outstanding:,}"
     )
+
 with col2:
     st.metric(
-        label="Total Outstanding Orders Over 5 weeks",
-        value=f"{outstanding_over_35_days:,}"
-    )
-with col3:
-    st.metric(
-        label="% of Outstanding Orders Over 5 weeks",
+        label="% of Outstanding Orders Over 35 Days",
         value=f"{percent_over_35_days:.2f}%"
     )
 
@@ -213,10 +214,10 @@ if selected_club == 'All Clubs':
             total_orders = grouped.size().reset_index(name='Total Orders Shipped')
 
             # Calculate orders shipped under 5 weeks
-            under_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+            under_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 
             # Calculate orders shipped over 5 weeks
-            over_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+            over_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 
             # Merge the summaries
             within_summary = pd.merge(total_orders, under_5_weeks, on=['Club Name', 'Creation Month'])
@@ -355,10 +356,10 @@ if not closed_orders_df['Time to Ship'].isna().all():
         grouped = percentage_df.groupby('Creation Month')
 
         # Calculate orders shipped under 5 weeks
-        under_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+        under_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 
         # Calculate orders shipped over 5 weeks
-        over_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+        over_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 
         # Merge the summaries
         percentage_summary = pd.merge(under_5_weeks, over_5_weeks, on='Creation Month')
@@ -456,10 +457,10 @@ if not closed_orders_df['Time to Ship'].isna().all():
         grouped_counts = count_df.groupby('Creation Month')
 
         # Calculate orders shipped under 5 weeks
-        under_5_weeks_counts = grouped_counts.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+        under_5_weeks_counts = grouped_counts['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 
         # Calculate orders shipped over 5 weeks
-        over_5_weeks_counts = grouped_counts.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+        over_5_weeks_counts = grouped_counts['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 
         # Merge the counts
         counts_summary = pd.merge(under_5_weeks_counts, over_5_weeks_counts, on='Creation Month')
@@ -881,7 +882,6 @@ st.download_button(
 
 st.markdown("---")
 st.write("**Note:** This analysis is based on the data available in the `aggregated_orders12.1.csv` file. Please ensure the data is up-to-date for accurate insights.")
-
 
 # # shipping_date_analysis.py
 #
