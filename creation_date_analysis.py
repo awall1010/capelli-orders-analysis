@@ -134,20 +134,20 @@ else:
 
 # Uncomment the following block if you need to debug the data
 
-st.sidebar.header("🔍 Debugging Information")
-if st.sidebar.checkbox("Show Sales Order Header Status Details"):
-    st.sidebar.subheader("Sales Order Header Status Details")
-    status_counts = filtered_df['Sales Order Header Status'].value_counts()
-    st.sidebar.write(status_counts)
-
-    st.sidebar.subheader("Example Entries")
-    st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
+# st.sidebar.header("🔍 Debugging Information")
+# if st.sidebar.checkbox("Show Sales Order Header Status Details"):
+#     st.sidebar.subheader("Sales Order Header Status Details")
+#     status_counts = filtered_df['Sales Order Header Status'].value_counts()
+#     st.sidebar.write(status_counts)
+#
+#     st.sidebar.subheader("Example Entries")
+#     st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
 
 # -------------------------- Outstanding Orders Metrics -------------------------- #
 
 st.subheader("Outstanding Orders Metrics")
 st.write("""
-This section displays the total number of outstanding orders (where 'Sales Order Header Status' is 'OPEN') and the percentage of these orders that are over 35 days old.
+This section displays the total number of outstanding orders and the percentage of these orders that are over 35 days old.
 """)
 
 # Filter for outstanding orders
