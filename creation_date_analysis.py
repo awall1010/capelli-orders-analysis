@@ -139,20 +139,20 @@ else:
 
 # Uncomment the following block if you need to debug the data
 
-st.sidebar.header("🔍 Debugging Information")
-if st.sidebar.checkbox("Show Sales Order Header Status Details"):
-    st.sidebar.subheader("Sales Order Header Status Details")
-    status_counts = filtered_df['Sales Order Header Status'].value_counts()
-    st.sidebar.write(status_counts)
-
-    st.sidebar.subheader("Example Entries")
-    st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
+# st.sidebar.header("🔍 Debugging Information")
+# if st.sidebar.checkbox("Show Sales Order Header Status Details"):
+#     st.sidebar.subheader("Sales Order Header Status Details")
+#     status_counts = filtered_df['Sales Order Header Status'].value_counts()
+#     st.sidebar.write(status_counts)
+#
+#     st.sidebar.subheader("Example Entries")
+#     st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
 
 # -------------------------- Outstanding Orders Metrics -------------------------- #
 
 st.subheader("Outstanding Orders Metrics")
 st.write("""
-This section displays the total number of outstanding orders (where 'Sales Order Header Status' is 'OPEN') and the percentage of these orders that are over 35 days old.
+This section displays the total number of outstanding orders and the percentage of these orders that are over 35 days old.
 """)
 
 # Filter for outstanding orders
@@ -171,17 +171,21 @@ outstanding_over_35_days = outstanding_df[outstanding_df['Order Age'] > 35].shap
 percent_over_35_days = (outstanding_over_35_days / total_outstanding * 100) if total_outstanding > 0 else 0.0
 
 # Display Metrics in Two Columns
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.metric(
         label="Total Outstanding Orders",
         value=f"{total_outstanding:,}"
     )
-
 with col2:
     st.metric(
-        label="% of Outstanding Orders Over 35 Days",
+        label="Total Outstanding Orders Over 5 weeks",
+        value=f"{outstanding_over_35_days:,}"
+    )
+with col3:
+    st.metric(
+        label="% of Outstanding Orders Over 5 weeks",
         value=f"{percent_over_35_days:.2f}%"
     )
 
