@@ -1,4 +1,4 @@
-# creation_date_analysis.py
+# shipping_date_analysis.py
 
 import streamlit as st
 import pandas as pd
@@ -10,17 +10,12 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from datetime import datetime
 import logging
-import warnings
-
-# -------------------------- Suppress Specific Warnings -------------------------- #
-# It's generally better to fix the root cause, but you can suppress warnings temporarily
-warnings.simplefilter(action='ignore', category=DeprecationWarning)
 
 # -------------------------- Streamlit App Setup -------------------------- #
 
-st.set_page_config(page_title="Creation Date Analysis", layout="wide")
+st.set_page_config(page_title="Aggregated Orders Analysis", layout="wide")
 
-st.title("Creation Date Analysis")
+st.title("Aggregated Orders Analysis")
 st.write("""
 This application analyzes aggregated order data from the `aggregated_orders12.22.csv` file. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
@@ -148,6 +143,28 @@ else:
 #     st.sidebar.subheader("Example Entries")
 #     st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
 
+# -------------------------- Initialize Session State for Metrics -------------------------- #
+
+if 'show_total' not in st.session_state:
+    st.session_state.show_total = False
+
+if 'show_over_5_weeks' not in st.session_state:
+    st.session_state.show_over_5_weeks = False
+
+if 'show_percent_over_5_weeks' not in st.session_state:
+    st.session_state.show_percent_over_5_weeks = False
+
+# -------------------------- Callback Functions to Toggle Metrics -------------------------- #
+
+def toggle_show_total():
+    st.session_state.show_total = not st.session_state.show_total
+
+def toggle_show_over_5_weeks():
+    st.session_state.show_over_5_weeks = not st.session_state.show_over_5_weeks
+
+def toggle_show_percent_over_5_weeks():
+    st.session_state.show_percent_over_5_weeks = not st.session_state.show_percent_over_5_weeks
+
 # -------------------------- Outstanding Orders Metrics -------------------------- #
 
 st.subheader("Outstanding Orders Metrics")
@@ -170,7 +187,7 @@ outstanding_over_35_days = outstanding_df[outstanding_df['Order Age'] > 35].shap
 # Calculate Percentage of Outstanding Orders Over 35 Days
 percent_over_35_days = (outstanding_over_35_days / total_outstanding * 100) if total_outstanding > 0 else 0.0
 
-# Display Metrics in Two Columns
+# Display Metrics in Three Columns with Toggle Buttons
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -178,16 +195,57 @@ with col1:
         label="Total Outstanding Orders",
         value=f"{total_outstanding:,}"
     )
+    st.button(
+        "Show Details",
+        on_click=toggle_show_total,
+        key="toggle_total"
+    )
+    if st.session_state.show_total:
+        st.write("### Details: Total Outstanding Orders")
+        st.dataframe(outstanding_df.reset_index(drop=True))
+        if st.button("Hide Details", key="hide_total"):
+            st.session_state.show_total = False
+
 with col2:
     st.metric(
         label="Total Outstanding Orders Over 5 weeks",
         value=f"{outstanding_over_35_days:,}"
     )
+    st.button(
+        "Show Details",
+        on_click=toggle_show_over_5_weeks,
+        key="toggle_over_5_weeks"
+    )
+    if st.session_state.show_over_5_weeks:
+        st.write("### Details: Outstanding Orders Over 5 Weeks")
+        st.dataframe(outstanding_df[outstanding_df['Order Age'] > 35].reset_index(drop=True))
+        if st.button("Hide Details", key="hide_over_5_weeks"):
+            st.session_state.show_over_5_weeks = False
+
 with col3:
     st.metric(
         label="% of Outstanding Orders Over 5 weeks",
         value=f"{percent_over_35_days:.2f}%"
     )
+    st.button(
+        "Show Details",
+        on_click=toggle_show_percent_over_5_weeks,
+        key="toggle_percent_over_5_weeks"
+    )
+    if st.session_state.show_percent_over_5_weeks:
+        st.write("### Details: Percentage of Outstanding Orders Over 5 Weeks")
+        st.write(f"**Total Outstanding Orders:** {total_outstanding:,}")
+        st.write(f"**Outstanding Orders Over 5 Weeks:** {outstanding_over_35_days:,}")
+        st.write(f"**Percentage:** {percent_over_35_days:.2f}%")
+        st.write("#### List of Orders Over 5 Weeks:")
+        st.dataframe(outstanding_df[outstanding_df['Order Age'] > 35].reset_index(drop=True))
+        if st.button("Hide Details", key="hide_percent_over_5_weeks"):
+            st.session_state.show_percent_over_5_weeks = False
+
+# -------------------------- (Optional) Continue with Rest of the App -------------------------- #
+
+# The rest of your Streamlit app remains unchanged.
+# Ensure that you place the following sections accordingly.
 
 # -------------------------- Percentage and Count of Orders Shipped Within 5 Weeks per Club -------------------------- #
 
@@ -218,10 +276,10 @@ if selected_club == 'All Clubs':
             total_orders = grouped.size().reset_index(name='Total Orders Shipped')
 
             # Calculate orders shipped under 5 weeks
-            under_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+            under_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 
             # Calculate orders shipped over 5 weeks
-            over_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+            over_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 
             # Merge the summaries
             within_summary = pd.merge(total_orders, under_5_weeks, on=['Club Name', 'Creation Month'])
@@ -259,7 +317,7 @@ if selected_club == 'All Clubs':
                 '#FFFACD',  # LemonChiffon
                 '#E6E6FA',  # Lavender
                 '#FFDAB9',  # PeachPuff
-                '#F0E68C',  # Khaki
+                '#E0E68C',  # Khaki
                 '#AFEEEE',  # PaleTurquoise
                 '#FFDEAD',  # NavajoWhite
                 '#E0FFFF',  # LightCyan
@@ -360,10 +418,10 @@ if not closed_orders_df['Time to Ship'].isna().all():
         grouped = percentage_df.groupby('Creation Month')
 
         # Calculate orders shipped under 5 weeks
-        under_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+        under_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 
         # Calculate orders shipped over 5 weeks
-        over_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+        over_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 
         # Merge the summaries
         percentage_summary = pd.merge(under_5_weeks, over_5_weeks, on='Creation Month')
@@ -461,10 +519,10 @@ if not closed_orders_df['Time to Ship'].isna().all():
         grouped_counts = count_df.groupby('Creation Month')
 
         # Calculate orders shipped under 5 weeks
-        under_5_weeks_counts = grouped_counts['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+        under_5_weeks_counts = grouped_counts.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 
         # Calculate orders shipped over 5 weeks
-        over_5_weeks_counts = grouped_counts['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+        over_5_weeks_counts = grouped_counts.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 
         # Merge the counts
         counts_summary = pd.merge(under_5_weeks_counts, over_5_weeks_counts, on='Creation Month')
@@ -887,7 +945,9 @@ st.download_button(
 st.markdown("---")
 st.write("**Note:** This analysis is based on the data available in the `aggregated_orders12.22.csv` file. Please ensure the data is up-to-date for accurate insights.")
 
-# # shipping_date_analysis.py
+
+
+# # creation_date_analysis.py
 #
 # import streamlit as st
 # import pandas as pd
@@ -897,15 +957,28 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # from itertools import cycle
 # from plotly.subplots import make_subplots
 # import plotly.graph_objects as go
+# from datetime import datetime
+# import logging
+# import warnings
+#
+# # -------------------------- Suppress Specific Warnings -------------------------- #
+# # It's generally better to fix the root cause, but you can suppress warnings temporarily
+# warnings.simplefilter(action='ignore', category=DeprecationWarning)
 #
 # # -------------------------- Streamlit App Setup -------------------------- #
 #
-# st.set_page_config(page_title="Aggregated Orders Analysis", layout="wide")
+# st.set_page_config(page_title="Creation Date Analysis", layout="wide")
 #
-# st.title("Aggregated Orders Analysis")
+# st.title("Creation Date Analysis")
 # st.write("""
 # This application analyzes aggregated order data from the `aggregated_orders12.22.csv` file. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 # """)
+#
+# # -------------------------- Logging Configuration -------------------------- #
+#
+# # Configure logging
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 #
 # # -------------------------- Data Loading -------------------------- #
 #
@@ -926,8 +999,10 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #
 #     try:
 #         df = pd.read_csv(filepath, sep=None, engine='python')  # Auto-detect separator
+#         logger.info(f"Successfully loaded data from {filepath}")
 #     except Exception as e:
 #         st.error(f"Error reading the file: {e}")
+#         logger.error(f"Error reading the file: {e}")
 #         st.stop()
 #
 #     # Verify required columns exist
@@ -940,10 +1015,13 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #     missing_columns = [col for col in required_columns if col not in df.columns]
 #     if missing_columns:
 #         st.error(f"The following required columns are missing in the CSV file: {', '.join(missing_columns)}")
+#         logger.error(f"Missing columns: {missing_columns}")
 #         st.stop()
 #
 #     # Drop records with Customer Reference "1320579"
+#     initial_count = df.shape[0]
 #     df = df[df['Customer Reference'] != "1320579"]
+#     logger.info(f"Dropped {initial_count - df.shape[0]} records with Customer Reference '1320579'")
 #
 #     # Parse date columns
 #     df['Date Created'] = pd.to_datetime(df['Date Created'], errors='coerce')
@@ -960,17 +1038,28 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #     # Fill NaN in numerical columns with 0
 #     df[numeric_cols] = df[numeric_cols].fillna(0)
 #
-#     # Standardize 'Sales Order Header Status' to uppercase for consistency
-#     df['Sales Order Header Status'] = df['Sales Order Header Status'].str.upper()
+#     # Define all statuses that indicate a closed/shipped order
+#     closed_statuses = ['CLOSED', 'COMPLETED', 'SHIPPED', 'CLOSE']
 #
-#     # Calculate 'Time to Ship' as the difference in days between 'Shipping Date' and 'Date Created'
-#     df['Time to Ship'] = (df['Shipping Date'] - df['Date Created']).dt.days
+#     # Standardize 'Sales Order Header Status' to uppercase and strip whitespace
+#     df['Sales Order Header Status'] = df['Sales Order Header Status'].str.upper().str.strip()
 #
-#     # Determine 'Over 5 weeks?' based on 'Time to Ship' > 35 days
+#     # Create a boolean column to indicate if an order is closed
+#     df['Is Closed'] = df['Sales Order Header Status'].isin(closed_statuses)
+#
+#     # Calculate 'Time to Ship' only for closed orders
+#     df['Time to Ship'] = np.where(
+#         df['Is Closed'],
+#         (df['Shipping Date'] - df['Date Created']).dt.days,
+#         np.nan  # Not applicable for OPEN orders
+#     )
+#
+#     # Determine 'Over 5 weeks?' based on 'Time to Ship' > 35 days for CLOSED orders
 #     df['Over 5 weeks?'] = np.where(df['Time to Ship'] > 35, 'Over 5 weeks', 'Under 5 weeks')
 #
-#     # Drop records with negative 'Time to Ship'
-#     df = df[df['Time to Ship'] >= 0]
+#     # Drop records with negative 'Time to Ship' (if any)
+#     df = df[(df['Time to Ship'] >= 0) | (df['Time to Ship'].isna())]
+#     logger.info(f"After filtering, total records: {df.shape[0]}")
 #
 #     return df
 #
@@ -990,8 +1079,64 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # # If a specific club is selected, filter the DataFrame
 # if selected_club != 'All Clubs':
 #     filtered_df = df[df['Club Name'] == selected_club]
+#     logger.info(f"Selected Club: {selected_club} | Records: {filtered_df.shape[0]}")
 # else:
 #     filtered_df = df.copy()
+#     logger.info(f"Selected Club: All Clubs | Records: {filtered_df.shape[0]}")
+#
+# # -------------------------- Debugging Section (Optional) -------------------------- #
+#
+# # Uncomment the following block if you need to debug the data
+#
+# # st.sidebar.header("🔍 Debugging Information")
+# # if st.sidebar.checkbox("Show Sales Order Header Status Details"):
+# #     st.sidebar.subheader("Sales Order Header Status Details")
+# #     status_counts = filtered_df['Sales Order Header Status'].value_counts()
+# #     st.sidebar.write(status_counts)
+# #
+# #     st.sidebar.subheader("Example Entries")
+# #     st.sidebar.write(filtered_df[['Customer Reference', 'Sales Order Header Status', 'Time to Ship', 'Shipping Date']].head(10))
+#
+# # -------------------------- Outstanding Orders Metrics -------------------------- #
+#
+# st.subheader("Outstanding Orders Metrics")
+# st.write("""
+# This section displays the total number of outstanding orders and the percentage of these orders that are over 35 days old.
+# """)
+#
+# # Filter for outstanding orders
+# outstanding_df = filtered_df[filtered_df['Sales Order Header Status'] == 'OPEN'].copy()
+# logger.info(f"Outstanding Orders: {outstanding_df.shape[0]}")
+#
+# # Calculate Total Outstanding Orders
+# total_outstanding = outstanding_df.shape[0]
+#
+# # Calculate Number of Outstanding Orders Over 35 Days
+# # For 'OPEN' orders, 'Time to Ship' is NaN, so calculate age separately
+# outstanding_df['Order Age'] = (pd.to_datetime(datetime.today().date()) - outstanding_df['Date Created']).dt.days
+# outstanding_over_35_days = outstanding_df[outstanding_df['Order Age'] > 35].shape[0]
+#
+# # Calculate Percentage of Outstanding Orders Over 35 Days
+# percent_over_35_days = (outstanding_over_35_days / total_outstanding * 100) if total_outstanding > 0 else 0.0
+#
+# # Display Metrics in Two Columns
+# col1, col2, col3 = st.columns(3)
+#
+# with col1:
+#     st.metric(
+#         label="Total Outstanding Orders",
+#         value=f"{total_outstanding:,}"
+#     )
+# with col2:
+#     st.metric(
+#         label="Total Outstanding Orders Over 5 weeks",
+#         value=f"{outstanding_over_35_days:,}"
+#     )
+# with col3:
+#     st.metric(
+#         label="% of Outstanding Orders Over 5 weeks",
+#         value=f"{percent_over_35_days:.2f}%"
+#     )
 #
 # # -------------------------- Percentage and Count of Orders Shipped Within 5 Weeks per Club -------------------------- #
 #
@@ -1001,9 +1146,13 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #     This table displays each club and, for each month based on the order creation date, the percentage and count of orders shipped within and over 5 weeks.
 #     """)
 #
-#     # Ensure there are date created to calculate percentages
-#     if not filtered_df['Date Created'].isna().all():
-#         within_5_weeks_df = filtered_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
+#     # Filter for 'CLOSED' orders
+#     closed_orders_df = filtered_df[filtered_df['Is Closed']].copy()
+#     logger.info(f"Closed Orders: {closed_orders_df.shape[0]}")
+#
+#     # Ensure there are shipped orders to calculate percentages
+#     if not closed_orders_df['Time to Ship'].isna().all():
+#         within_5_weeks_df = closed_orders_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
 #
 #         if within_5_weeks_df.empty:
 #             st.write("No shipping time data available to display percentage and count analysis.")
@@ -1012,20 +1161,20 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #             within_5_weeks_df['Creation Month'] = within_5_weeks_df['Date Created'].dt.to_period('M').dt.strftime('%Y-%m')
 #
 #             # Group by Club and Creation Month
-#             grouped_within = within_5_weeks_df.groupby(['Club Name', 'Creation Month'])
+#             grouped = within_5_weeks_df.groupby(['Club Name', 'Creation Month'])
 #
 #             # Calculate total orders per club per month
-#             total_orders_club_month = grouped_within.size().reset_index(name='Total Orders Shipped')
+#             total_orders = grouped.size().reset_index(name='Total Orders Shipped')
 #
 #             # Calculate orders shipped under 5 weeks
-#             under_5_weeks_club_month = grouped_within.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+#             under_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 #
 #             # Calculate orders shipped over 5 weeks
-#             over_5_weeks_club_month = grouped_within.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+#             over_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 #
 #             # Merge the summaries
-#             within_summary = pd.merge(total_orders_club_month, under_5_weeks_club_month, on=['Club Name', 'Creation Month'])
-#             within_summary = pd.merge(within_summary, over_5_weeks_club_month, on=['Club Name', 'Creation Month'])
+#             within_summary = pd.merge(total_orders, under_5_weeks, on=['Club Name', 'Creation Month'])
+#             within_summary = pd.merge(within_summary, over_5_weeks, on=['Club Name', 'Creation Month'])
 #
 #             # Calculate percentages
 #             within_summary['% Shipped Within 5 Weeks'] = (
@@ -1036,19 +1185,22 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #                 within_summary['Orders Shipped Over 5 Weeks'] / within_summary['Total Orders Shipped'] * 100
 #             ).round(2)
 #
-#             # Pivot the table
-#             pivot_within = within_summary.pivot(index='Club Name', columns='Creation Month', values=['% Shipped Within 5 Weeks', '% Shipped Over 5 Weeks', 'Orders Shipped Under 5 Weeks', 'Orders Shipped Over 5 Weeks'])
+#             # Pivot the table to have months as columns
+#             pivot_within = within_summary.pivot(index='Club Name', columns='Creation Month', values=[
+#                 '% Shipped Within 5 Weeks',
+#                 '% Shipped Over 5 Weeks',
+#                 'Orders Shipped Under 5 Weeks',
+#                 'Orders Shipped Over 5 Weeks'
+#             ])
 #
-#             # Flatten the MultiIndex columns
-#             pivot_within.columns = [f"{col[1]} {col[0]}" for col in pivot_within.columns]
-#
-#             # Fill NaN with 0
-#             pivot_within = pivot_within.fillna(0)
-#
-#             # Reset index to have 'Club Name' as a column
+#             # Flatten MultiIndex columns
+#             pivot_within.columns = [f"{month} {metric}" for metric, month in pivot_within.columns]
 #             pivot_within.reset_index(inplace=True)
 #
-#             # Define a list of subdued colors for the months
+#             # Fill NaN with 0 (if any)
+#             pivot_within = pivot_within.fillna(0)
+#
+#             # Define a list of subdued colors for the months (Optional)
 #             color_list = [
 #                 '#D3D3D3',  # LightGray
 #                 '#B0C4DE',  # LightSteelBlue
@@ -1077,8 +1229,8 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #                 '#FFF0F5'   # LavenderBlush
 #             ]
 #
-#             # Assign colors to each month set of four columns
-#             months = sorted(within_summary['Creation Month'].unique())
+#             # Assign colors to each month
+#             months = sorted(within_5_weeks_df['Creation Month'].unique())
 #             color_cycle = cycle(color_list)
 #             month_colors = {month: next(color_cycle) for month in months}
 #
@@ -1102,39 +1254,13 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #                         bg_color = column_color_mapping.get(col, '')
 #                         if 'Shipped Within' in col or 'Shipped Over' in col:
 #                             styles.append(f'background-color: {bg_color}; color: black; text-align: center;')
-#                         else:
-#                             # For count columns, keep the same background but maybe different text formatting
+#                         elif 'Orders Shipped' in col:
 #                             styles.append(f'background-color: {bg_color}; color: black; text-align: center;')
+#                         else:
+#                             styles.append('')
 #                 return styles
 #
 #             # Apply the styling
-#             styled_pivot_within = pivot_within.style.format({
-#                 **{col: "{:.2f}%" for col in pivot_within.columns if 'Shipped Within' in col or 'Shipped Over' in col},
-#                 **{col: "{:,}" for col in pivot_within.columns if 'Orders Shipped' in col}
-#             }).apply(highlight_columns, axis=1)
-#
-#             # -------------------------- Reorder Columns -------------------------- #
-#
-#             # Initialize the desired order with 'Club Name'
-#             desired_order = ['Club Name']
-#
-#             # Iterate through each month and append the four metrics in the specified order
-#             for month in months:
-#                 desired_order.extend([
-#                     f"{month} % Shipped Within 5 Weeks",
-#                     f"{month} % Shipped Over 5 Weeks",
-#                     f"{month} Orders Shipped Under 5 Weeks",
-#                     f"{month} Orders Shipped Over 5 Weeks"
-#                 ])
-#
-#             # Add any additional columns that might exist but are not part of the desired order
-#             additional_cols = [col for col in pivot_within.columns if col not in desired_order]
-#             desired_order.extend(additional_cols)
-#
-#             # Reorder the DataFrame columns
-#             pivot_within = pivot_within[desired_order]
-#
-#             # Reapply the styling after reordering
 #             styled_pivot_within = pivot_within.style.format({
 #                 **{col: "{:.2f}%" for col in pivot_within.columns if 'Shipped Within' in col or 'Shipped Over' in col},
 #                 **{col: "{:,}" for col in pivot_within.columns if 'Orders Shipped' in col}
@@ -1165,9 +1291,13 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # This table shows the percentage of orders that took over 5 weeks to ship for each month based on the order creation date.
 # """)
 #
-# # Ensure there are date created to calculate percentages
-# if not filtered_df['Date Created'].isna().all():
-#     percentage_df = filtered_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
+# # Filter for 'CLOSED' orders
+# closed_orders_df = filtered_df[filtered_df['Is Closed']].copy()
+# logger.info(f"Closed Orders for Percentage Section: {closed_orders_df.shape[0]}")
+#
+# # Ensure there are shipped orders to calculate percentages
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     percentage_df = closed_orders_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
 #
 #     if percentage_df.empty:
 #         st.write("No shipping time data available to display percentage analysis.")
@@ -1178,18 +1308,15 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #         # Group by Creation Month
 #         grouped = percentage_df.groupby('Creation Month')
 #
-#         # Calculate total orders shipped per month
-#         total_orders = grouped.size().reset_index(name='Total Orders Shipped')
-#
 #         # Calculate orders shipped under 5 weeks
-#         under_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+#         under_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 #
 #         # Calculate orders shipped over 5 weeks
-#         over_5_weeks = grouped.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+#         over_5_weeks = grouped['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 #
 #         # Merge the summaries
-#         percentage_summary = pd.merge(total_orders, under_5_weeks, on='Creation Month')
-#         percentage_summary = pd.merge(percentage_summary, over_5_weeks, on='Creation Month')
+#         percentage_summary = pd.merge(under_5_weeks, over_5_weeks, on='Creation Month')
+#         percentage_summary['Total Orders Shipped'] = percentage_summary['Orders Shipped Under 5 Weeks'] + percentage_summary['Orders Shipped Over 5 Weeks']
 #
 #         # Calculate percentages
 #         percentage_summary['% Of Orders Shipped under 5 weeks'] = (
@@ -1244,7 +1371,8 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #             'text-align': 'center'
 #         })
 #
-#         # Display the percentage table
+#         # -------------------------- Display the Percentage Table -------------------------- #
+#
 #         st.dataframe(styled_percentage_table, use_container_width=True)
 #
 #         # -------------------------- Download Button for Percentage Table -------------------------- #
@@ -1259,18 +1387,18 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #             mime='text/csv',
 #         )
 # else:
-#     st.write("No date created data available to display the percentage of orders over 5 weeks.")
+#     st.write("No shipped orders available to display the percentage of orders over 5 weeks.")
 #
-# # -------------------------- Count of Orders Over 5 Weeks per Club -------------------------- #
+# # -------------------------- Count of Orders Over 5 Weeks -------------------------- #
 #
 # st.subheader("Count of Orders Over 5 Weeks (Month Over Month)")
 # st.write("""
 # This table shows the count of orders that took over 5 weeks to ship for each month based on the order creation date.
 # """)
 #
-# # Ensure there are date created to calculate counts
-# if not filtered_df['Date Created'].isna().all():
-#     count_df = filtered_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
+# # Ensure there are shipped orders to calculate counts
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     count_df = closed_orders_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
 #
 #     if count_df.empty:
 #         st.write("No shipping time data available to display count analysis.")
@@ -1282,13 +1410,14 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #         grouped_counts = count_df.groupby('Creation Month')
 #
 #         # Calculate orders shipped under 5 weeks
-#         under_5_weeks_counts = grouped_counts.apply(lambda x: (x['Over 5 weeks?'] == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
+#         under_5_weeks_counts = grouped_counts['Over 5 weeks?'].apply(lambda x: (x == 'Under 5 weeks').sum()).reset_index(name='Orders Shipped Under 5 Weeks')
 #
 #         # Calculate orders shipped over 5 weeks
-#         over_5_weeks_counts = grouped_counts.apply(lambda x: (x['Over 5 weeks?'] == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
+#         over_5_weeks_counts = grouped_counts['Over 5 weeks?'].apply(lambda x: (x == 'Over 5 weeks').sum()).reset_index(name='Orders Shipped Over 5 Weeks')
 #
 #         # Merge the counts
 #         counts_summary = pd.merge(under_5_weeks_counts, over_5_weeks_counts, on='Creation Month')
+#         counts_summary['Total Orders Shipped'] = counts_summary['Orders Shipped Under 5 Weeks'] + counts_summary['Orders Shipped Over 5 Weeks']
 #
 #         # Format Creation Month as string for better display
 #         counts_summary['Creation Month'] = counts_summary['Creation Month'].astype(str)
@@ -1326,7 +1455,8 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #             'text-align': 'center'
 #         })
 #
-#         # Display the counts table
+#         # -------------------------- Display the Counts Table -------------------------- #
+#
 #         st.dataframe(styled_counts_table, use_container_width=True)
 #
 #         # -------------------------- Download Button for Count Table -------------------------- #
@@ -1341,7 +1471,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #             mime='text/csv',
 #         )
 # else:
-#     st.write("No date created data available to display the count of orders over 5 weeks.")
+#     st.write("No shipped orders available to display the count of orders over 5 weeks.")
 #
 # # -------------------------- Shipping Time for Each Order Over Time -------------------------- #
 #
@@ -1350,9 +1480,9 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # This graph shows how long it took for each order to ship, based on the order creation date over time.
 # """)
 #
-# # Ensure there are date created to plot
-# if not filtered_df['Date Created'].isna().all():
-#     shipping_time_df = filtered_df.dropna(subset=['Date Created', 'Time to Ship'])
+# # Ensure there are shipped orders to plot
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     shipping_time_df = closed_orders_df.dropna(subset=['Date Created', 'Time to Ship'])
 #
 #     if shipping_time_df.empty:
 #         st.write("No shipping time data available to display.")
@@ -1393,7 +1523,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #
 #         st.plotly_chart(fig_shipping_time, use_container_width=True)
 # else:
-#     st.write("No date created data available to display the shipping time graph.")
+#     st.write("No shipped orders available to display the shipping time graph.")
 #
 # # -------------------------- Number of Orders Shipped Over Time -------------------------- #
 #
@@ -1402,9 +1532,9 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # This graph shows the number of orders placed each month based on the order creation date.
 # """)
 #
-# # Ensure there are date created to plot
-# if not filtered_df['Date Created'].isna().all():
-#     orders_count_df = filtered_df.dropna(subset=['Date Created']).copy()
+# # Ensure there are shipped orders to plot
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     orders_count_df = closed_orders_df.dropna(subset=['Date Created']).copy()
 #
 #     if orders_count_df.empty:
 #         st.write("No shipping data available to display orders count over time.")
@@ -1439,7 +1569,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #
 #         st.plotly_chart(fig_orders_over_time, use_container_width=True)
 # else:
-#     st.write("No date created data available to display orders count over time.")
+#     st.write("No shipped orders available to display orders count over time.")
 #
 # # -------------------------- Average Shipping Time per Month -------------------------- #
 #
@@ -1449,8 +1579,8 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # """)
 #
 # # Calculate average shipping time per month
-# if not filtered_df['Date Created'].isna().all():
-#     avg_shipping_time_month = shipping_time_df.copy()
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     avg_shipping_time_month = closed_orders_df.copy()
 #     avg_shipping_time_month['Creation Month'] = avg_shipping_time_month['Date Created'].dt.to_period('M').dt.strftime('%Y-%m')
 #
 #     # Box Plot
@@ -1501,7 +1631,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #     with col2:
 #         st.plotly_chart(fig_bar, use_container_width=True)
 # else:
-#     st.write("No date created data available to display average shipping time per month.")
+#     st.write("No shipped orders available to display average shipping time per month.")
 #
 # # -------------------------- Comparison of Orders and Average Shipping Time Over Time -------------------------- #
 #
@@ -1510,9 +1640,9 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # This visualization compares the total number of orders created each month with the average shipping time for those orders. It helps in understanding how order volumes influence shipping performance.
 # """)
 #
-# # Ensure there are date created to perform comparison analysis
-# if not filtered_df['Date Created'].isna().all():
-#     comparison_df = shipping_time_df.copy()
+# # Ensure there are shipped orders to perform comparison analysis
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     comparison_df = closed_orders_df.copy()
 #     comparison_df['Creation Month'] = comparison_df['Date Created'].dt.to_period('M').dt.strftime('%Y-%m')
 #
 #     # Group by Creation Month to get total orders and average shipping time
@@ -1572,7 +1702,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #         mime='text/csv',
 #     )
 # else:
-#     st.write("No date created data available to perform comparison analysis.")
+#     st.write("No shipped orders available to perform comparison analysis.")
 #
 # # -------------------------- Correlation Between Number of Orders Shipped and Shipping Time -------------------------- #
 #
@@ -1581,9 +1711,9 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # This analysis examines whether there's a relationship between the number of orders shipped in a month and the average shipping time for those orders. Understanding this correlation can help in forecasting shipping performance based on order volumes.
 # """)
 #
-# # Ensure there are date created to perform correlation analysis
-# if not filtered_df['Date Created'].isna().all():
-#     correlation_df = filtered_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
+# # Ensure there are shipped orders to perform correlation analysis
+# if not closed_orders_df['Time to Ship'].isna().all():
+#     correlation_df = closed_orders_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
 #
 #     if correlation_df.empty:
 #         st.write("No shipping time data available to perform correlation analysis.")
@@ -1646,7 +1776,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #             mime='text/csv',
 #         )
 # else:
-#     st.write("No date created data available to perform correlation analysis.")
+#     st.write("No shipped orders available to perform correlation analysis.")
 #
 # # -------------------------- Average Order Time per Club -------------------------- #
 #
@@ -1656,7 +1786,7 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 # """)
 #
 # # Calculate average shipping time and number of orders shipped per club
-# average_order_time = shipping_time_df.groupby('Club Name').agg(
+# average_order_time = closed_orders_df.groupby('Club Name').agg(
 #     Average_Shipping_Time_Days=('Time to Ship', 'mean'),
 #     Number_of_Orders_Shipped=('Customer Reference', 'count')
 # ).reset_index()
@@ -1705,5 +1835,3 @@ st.write("**Note:** This analysis is based on the data available in the `aggrega
 #
 # st.markdown("---")
 # st.write("**Note:** This analysis is based on the data available in the `aggregated_orders12.22.csv` file. Please ensure the data is up-to-date for accurate insights.")
-#
-# # # shipping_date_analysis.py
