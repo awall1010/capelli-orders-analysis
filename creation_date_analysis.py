@@ -79,6 +79,7 @@ def load_data(filepath):
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
     # Handle missing values
+    # For 'Sales Order Header Status', fill NaN with 'UNKNOWN'
     df['Sales Order Header Status'] = df['Sales Order Header Status'].fillna('UNKNOWN')
 
     # Fill NaN in numerical columns with 0
@@ -100,12 +101,30 @@ def load_data(filepath):
         np.nan  # Not applicable for OPEN orders
     )
 
-    # Determine 'Over 5 weeks?' based on 'Time to Ship' > 35 days for CLOSED orders
-    df['Over 5 weeks?'] = np.where(df['Time to Ship'] > 35, 'Over 5 weeks', 'Under 5 weeks')
+    # Calculate 'Order Age' as the number of days since 'Date Created' up to today
+    df['Order Age'] = (pd.to_datetime(datetime.today().date()) - df['Date Created']).dt.days
 
-    # Drop records with negative 'Time to Ship' (if any)
-    df = df[(df['Time to Ship'] >= 0) | (df['Time to Ship'].isna())]
-    logger.info(f"After filtering, total records: {df.shape[0]}")
+    # Determine 'Over 5 weeks?' based on:
+    # - For CLOSED orders: 'Time to Ship' > 35 days
+    # - For OPEN orders: 'Order Age' > 35 days
+    df['Over 5 weeks?'] = np.where(
+        (df['Is Closed'] & (df['Time to Ship'] > 35)) |
+        (~df['Is Closed'] & (df['Order Age'] > 35)),
+        'Over 5 weeks',
+        'Under 5 weeks'
+    )
+
+    # Drop records with negative 'Time to Ship' or 'Order Age' (if any)
+    df = df[
+        ((df['Is Closed'] & (df['Time to Ship'] >= 0)) |
+         (~df['Is Closed'] & (df['Order Age'] >= 0)))
+    ]
+
+    logger.info(f"After preprocessing, total records: {df.shape[0]}")
+
+    # Display data types after preprocessing
+    logger.info("Data Types After Preprocessing:\n" + str(df.dtypes))
+    logger.info("First 5 Rows After Preprocessing:\n" + str(df.head()))
 
     return df
 
@@ -180,8 +199,6 @@ logger.info(f"Outstanding Orders: {outstanding_df.shape[0]}")
 total_outstanding = outstanding_df.shape[0]
 
 # Calculate Number of Outstanding Orders Over 35 Days
-# For 'OPEN' orders, 'Time to Ship' is NaN, so calculate age separately
-outstanding_df['Order Age'] = (pd.to_datetime(datetime.today().date()) - outstanding_df['Date Created']).dt.days
 outstanding_over_35_days = outstanding_df[outstanding_df['Order Age'] > 35].shape[0]
 
 # Calculate Percentage of Outstanding Orders Over 35 Days
@@ -322,6 +339,7 @@ if selected_club == 'All Clubs':
                 '#FFDEAD',  # NavajoWhite
                 '#E0FFFF',  # LightCyan
                 '#F5DEB3',  # Wheat
+                '#FFF9C4',  # LightGoldenrodYellow
                 '#FFE4E1',  # MistyRose
                 '#F0FFF0',  # Honeydew
                 '#FFF0F5',  # LavenderBlush
@@ -505,7 +523,7 @@ st.write("""
 This table shows the count of orders that took over 5 weeks to ship for each month based on the order creation date.
 """)
 
-# Ensure there are shipped orders to calculate counts
+# Ensure there are shipped orders to perform count analysis
 if not closed_orders_df['Time to Ship'].isna().all():
     count_df = closed_orders_df.dropna(subset=['Date Created', 'Time to Ship']).copy()
 
@@ -801,7 +819,7 @@ if not closed_orders_df['Time to Ship'].isna().all():
 
     # -------------------------- Download Button for Comparison Data -------------------------- #
 
-    # Convert the aggregated comparison DataFrame to CSV
+    # Optional: Add a download button for the correlation summary
     csv_comparison = aggregated_comparison.to_csv(index=False).encode('utf-8')
 
     st.download_button(
@@ -908,7 +926,7 @@ club_colors = {
     club: color for club, color in zip(sorted(average_order_time['Club Name'].unique()), cycle([
         '#FFCDD2', '#F8BBD0', '#E1BEE7', '#D1C4E9',
         '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2',
-        '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3',
+        '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0FFF0',
         '#FFF9C4', '#FFECB3', '#FFE0B2', '#FFCCBC',
         '#D7CCC8', '#CFD8DC'
     ]))
@@ -944,7 +962,6 @@ st.download_button(
 
 st.markdown("---")
 st.write("**Note:** This analysis is based on the data available in the `aggregated_orders12.29.csv` file. Please ensure the data is up-to-date for accurate insights.")
-
 
 
 # # creation_date_analysis.py
