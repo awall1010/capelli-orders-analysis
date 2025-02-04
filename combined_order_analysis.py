@@ -17,7 +17,7 @@ st.set_page_config(page_title="Order Analysis Comparison", layout="wide")
 
 st.title("Order Analysis Comparison: 2023 vs 2025")
 st.write("""
-This application analyzes and compares aggregated order data from the `Capelli2023_aggregated_orders.csv` and `aggregated_orders1.26.csv` files. Explore delivery times and shipping performance across different clubs based on the order creation dates.
+This application analyzes and compares aggregated order data from the `Capelli2023_aggregated_orders.csv` and `aggregated_orders2.3.csv` files. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
 
 # -------------------------- Logging Configuration -------------------------- #
@@ -32,17 +32,17 @@ logger = logging.getLogger(__name__)
 def load_2023_data(filepath):
     """
     Loads and preprocesses the 2023 aggregated orders data.
-    
+
     Parameters:
     - filepath (str): Path to the Capelli2023_aggregated_orders.csv file.
-    
+
     Returns:
     - pd.DataFrame: Preprocessed DataFrame with unified columns.
     """
     if not os.path.exists(filepath):
         st.error(f"The file '{filepath}' does not exist in the specified directory.")
         st.stop()
-    
+
     try:
         df_2023 = pd.read_csv(filepath, sep=None, engine='python')  # Auto-detect separator
         logger.info(f"Successfully loaded 2023 data from {filepath}")
@@ -50,18 +50,18 @@ def load_2023_data(filepath):
         st.error(f"Error reading the 2023 file: {e}")
         logger.error(f"Error reading the 2023 file: {e}")
         st.stop()
-    
+
     # Verify required columns exist
     required_columns_2023 = [
         'order_id', 'Club Name', 'First Order Date', 'Latest Ship Date', 'Total Products Ordered'
     ]
-    
+
     missing_columns_2023 = [col for col in required_columns_2023 if col not in df_2023.columns]
     if missing_columns_2023:
         st.error(f"The following required columns are missing in the 2023 CSV file: {', '.join(missing_columns_2023)}")
         logger.error(f"Missing columns in 2023 data: {missing_columns_2023}")
         st.stop()
-    
+
     # Rename columns to match recent data
     df_2023 = df_2023.rename(columns={
         'order_id': 'Order ID',
@@ -69,43 +69,43 @@ def load_2023_data(filepath):
         'Latest Ship Date': 'Shipping Date',
         'Total Products Ordered': 'Order Quantity'
     })
-    
+
     # Parse date columns
     df_2023['Date Created'] = pd.to_datetime(df_2023['Date Created'], errors='coerce')
     df_2023['Shipping Date'] = pd.to_datetime(df_2023['Shipping Date'], errors='coerce')
-    
+
     # Add Shipped Quantity and Unshipped Quantity
     df_2023['Shipped Quantity'] = df_2023['Order Quantity']
     df_2023['Unshipped Quantity'] = 0.0  # Assuming all orders are shipped in 2023 data
     df_2023['Sales Order Header Status'] = 'SHIPPED'  # Assuming all orders are shipped
-    
+
     # Add Year column
     df_2023['Year'] = 2023
-    
+
     # Reorder columns to match recent data
     df_2023 = df_2023[[
         'Order ID', 'Club Name', 'Date Created', 'Order Quantity',
         'Shipped Quantity', 'Unshipped Quantity', 'Shipping Date',
         'Sales Order Header Status', 'Year'
     ]]
-    
+
     return df_2023
 
 @st.cache_data
 def load_recent_data(filepath):
     """
     Loads and preprocesses the recent aggregated orders data.
-    
+
     Parameters:
-    - filepath (str): Path to the aggregated_orders1.26.csv file.
-    
+    - filepath (str): Path to the aggregated_orders2.3.csv file.
+
     Returns:
     - pd.DataFrame: Preprocessed DataFrame with unified columns.
     """
     if not os.path.exists(filepath):
         st.error(f"The file '{filepath}' does not exist in the specified directory.")
         st.stop()
-    
+
     try:
         df_recent = pd.read_csv(filepath, sep=None, engine='python')  # Auto-detect separator
         logger.info(f"Successfully loaded recent data from {filepath}")
@@ -113,50 +113,50 @@ def load_recent_data(filepath):
         st.error(f"Error reading the recent file: {e}")
         logger.error(f"Error reading the recent file: {e}")
         st.stop()
-    
+
     # Verify required columns exist
     required_columns_recent = [
         'Customer Reference', 'Club Name', 'Date Created', 'Order Quantity',
         'Shipped Quantity', 'Unshipped Quantity', 'Shipping Date',
         'Sales Order Header Status'
     ]
-    
+
     missing_columns_recent = [col for col in required_columns_recent if col not in df_recent.columns]
     if missing_columns_recent:
         st.error(f"The following required columns are missing in the recent CSV file: {', '.join(missing_columns_recent)}")
         logger.error(f"Missing columns in recent data: {missing_columns_recent}")
         st.stop()
-    
+
     # Rename columns to match 2023 data
     df_recent = df_recent.rename(columns={
         'Customer Reference': 'Order ID'
     })
-    
+
     # Parse date columns
     df_recent['Date Created'] = pd.to_datetime(df_recent['Date Created'], errors='coerce')
     df_recent['Shipping Date'] = pd.to_datetime(df_recent['Shipping Date'], errors='coerce')
-    
+
     # Add Year column extracted from 'Date Created'
     df_recent['Year'] = df_recent['Date Created'].dt.year
-    
+
     # Reorder columns to match 2023 data
     df_recent = df_recent[[
         'Order ID', 'Club Name', 'Date Created', 'Order Quantity',
         'Shipped Quantity', 'Unshipped Quantity', 'Shipping Date',
         'Sales Order Header Status', 'Year'
     ]]
-    
+
     return df_recent
 
 @st.cache_data
 def combine_data(df_2023, df_recent):
     """
     Combines 2023 and recent data into a single DataFrame.
-    
+
     Parameters:
     - df_2023 (pd.DataFrame): 2023 orders DataFrame.
     - df_recent (pd.DataFrame): Recent orders DataFrame.
-    
+
     Returns:
     - pd.DataFrame: Combined DataFrame.
     """
@@ -168,7 +168,7 @@ def combine_data(df_2023, df_recent):
 
 # Load the data
 data_file_2023 = os.path.join('shippingdates', 'Capelli2023_aggregated_orders.csv')
-data_file_recent = os.path.join('shippingdates', 'aggregated_orders1.26.csv')
+data_file_recent = os.path.join('shippingdates', 'aggregated_orders2.3.csv')
 
 df_2023 = load_2023_data(data_file_2023)
 df_recent = load_recent_data(data_file_recent)
@@ -764,7 +764,7 @@ if not closed_orders_df['Time to Ship'].isna().all():
         shipping_time_df['Month'] = shipping_time_df['Date Created'].dt.month_name()
 
         # Ensure months are ordered correctly
-        month_order = ['January', 'February', 'March', 'April', 'May', 'June', 
+        month_order = ['January', 'February', 'March', 'April', 'May', 'June',
                       'July', 'August', 'September', 'October', 'November', 'December']
         shipping_time_df['Month'] = pd.Categorical(shipping_time_df['Month'], categories=month_order, ordered=True)
 
@@ -849,7 +849,7 @@ if not closed_orders_df['Time to Ship'].isna().all():
         orders_per_month_year = orders_count_df.groupby(['Month', 'Year']).size().reset_index(name='Number of Orders Shipped')
 
         # Ensure months are ordered correctly
-        month_order = ['January', 'February', 'March', 'April', 'May', 'June', 
+        month_order = ['January', 'February', 'March', 'April', 'May', 'June',
                       'July', 'August', 'September', 'October', 'November', 'December']
         orders_per_month_year['Month'] = pd.Categorical(orders_per_month_year['Month'], categories=month_order, ordered=True)
 
@@ -1157,4 +1157,4 @@ st.download_button(
 # -------------------------- Final Touches -------------------------- #
 
 st.markdown("---")
-st.write("**Note:** This analysis is based on the data available in the `Capelli2023_aggregated_orders.csv` and `aggregated_orders1.26.csv` files. Please ensure the data is up-to-date for accurate insights.")
+st.write("**Note:** This analysis is based on the data available in the `Capelli2023_aggregated_orders.csv` and `aggregated_orders2.3.csv` files. Please ensure the data is up-to-date for accurate insights.")
