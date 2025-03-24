@@ -168,7 +168,7 @@ def combine_data(df_2023, df_recent):
 
 # Load the data
 data_file_2023 = os.path.join('shippingdates', 'Capelli2023_aggregated_orders.csv')
-data_file_recent = os.path.join('shippingdates', 'aggregated_order23.csv')
+data_file_recent = os.path.join('shippingdates', 'aggregated_order3.23.csv')
 
 df_2023 = load_2023_data(data_file_2023)
 df_recent = load_recent_data(data_file_recent)
