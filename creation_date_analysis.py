@@ -19,7 +19,7 @@ st.set_page_config(page_title="Aggregated Orders Analysis", layout="wide")
 
 st.title("Aggregated Orders Analysis")
 st.write("""
-This application analyzes aggregated order data from the `aggregated_orders3.23.csv` file. Explore delivery times and shipping performance across different clubs based on the order creation dates.
+This application analyzes aggregated order data from the `aggregated_orders3.30.csv` file. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
 
 # -------------------------- Logging Configuration -------------------------- #
@@ -129,7 +129,7 @@ def load_data(filepath):
     return df
 
 # Load the data
-data_file = os.path.join('shippingdates', 'aggregated_orders3.23.csv')
+data_file = os.path.join('shippingdates', 'aggregated_orders3.30.csv')
 df = load_data(data_file)
 
 # -------------------------- Sidebar Filters -------------------------- #
@@ -961,4 +961,4 @@ st.download_button(
 # -------------------------- Final Touches -------------------------- #
 
 st.markdown("---")
-st.write("**Note:** This analysis is based on the data available in the `aggregated_orders3.23.csv` file. Please ensure the data is up-to-date for accurate insights.")
+st.write("**Note:** This analysis is based on the data available in the `aggregated_orders3.30.csv` file. Please ensure the data is up-to-date for accurate insights.")
