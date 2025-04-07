@@ -17,7 +17,7 @@ st.set_page_config(page_title="Order Analysis Comparison", layout="wide")
 
 st.title("Order Analysis Comparison: 2023 vs 2025")
 st.write("""
-This application analyzes and compares aggregated order data from the `Capelli2023_aggregated_orders.csv` and `aggregated_orders3.30.csv` files. Explore delivery times and shipping performance across different clubs based on the order creation dates.
+This application analyzes and compares aggregated order data from the `Capelli2023_aggregated_orders.csv` and `aggregated_orders4.6.csv` files. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
 
 # -------------------------- Logging Configuration -------------------------- #
@@ -97,7 +97,7 @@ def load_recent_data(filepath):
     Loads and preprocesses the recent aggregated orders data.
 
     Parameters:
-    - filepath (str): Path to the aggregated_orders3.30.csv file.
+    - filepath (str): Path to the aggregated_orders4.6.csv file.
 
     Returns:
     - pd.DataFrame: Preprocessed DataFrame with unified columns.
@@ -168,7 +168,7 @@ def combine_data(df_2023, df_recent):
 
 # Load the data
 data_file_2023 = os.path.join('shippingdates', 'Capelli2023_aggregated_orders.csv')
-data_file_recent = os.path.join('shippingdates', 'aggregated_orders3.30.csv')
+data_file_recent = os.path.join('shippingdates', 'aggregated_orders4.6.csv')
 
 df_2023 = load_2023_data(data_file_2023)
 df_recent = load_recent_data(data_file_recent)
@@ -1157,4 +1157,4 @@ st.download_button(
 # -------------------------- Final Touches -------------------------- #
 
 st.markdown("---")
-st.write("**Note:** This analysis is based on the data available in the `Capelli2023_aggregated_orders.csv` and `aaggregated_orders3.30.csv` files. Please ensure the data is up-to-date for accurate insights.")
+st.write("**Note:** This analysis is based on the data available in the `Capelli2023_aggregated_orders.csv` and `aaggregated_orders4.6.csv` files. Please ensure the data is up-to-date for accurate insights.")
