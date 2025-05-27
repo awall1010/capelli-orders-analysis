@@ -17,7 +17,7 @@ st.set_page_config(page_title="Order Analysis Comparison", layout="wide")
 
 st.title("Order Analysis Comparison: 2023 vs 2025")
 st.write("""
-This application analyzes and compares aggregated order data from the `Capelli2023_aggregated_orders.csv` and `aggregated_orders11.csv` files. Explore delivery times and shipping performance across different clubs based on the order creation dates.
+This application analyzes and compares aggregated order data from the `Capelli2023_aggregated_orders.csv` and `aggregated_orders5.26.csv` files. Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
 
 # -------------------------- Logging Configuration -------------------------- #
