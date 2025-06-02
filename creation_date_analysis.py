@@ -129,7 +129,7 @@ def load_data(filepath):
     return df
 
 # Load the data
-data_file = os.path.join('shippingdates', 'aggregated_orders5.26.csv')
+data_file = os.path.join('shippingdates', 'aggregated_orders6.1.csv')
 df = load_data(data_file)
 
 # -------------------------- Sidebar Filters -------------------------- #
@@ -961,4 +961,4 @@ st.download_button(
 # -------------------------- Final Touches -------------------------- #
 
 st.markdown("---")
-st.write("**Note:** This analysis is based on the data available in the `aggregated_orders5.26.csv` file. Please ensure the data is up-to-date for accurate insights.")
+st.write("**Note:** This analysis is based on the data available in the `aggregated_orders6.1.csv` file. Please ensure the data is up-to-date for accurate insights.")
