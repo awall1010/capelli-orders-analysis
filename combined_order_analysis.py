@@ -1181,7 +1181,7 @@ st.title("Order Analysis: Historical (2023-2024) vs. Current Season (e.g., 2025)
 st.write("""
 This application analyzes and compares aggregated order data.
 Historical data (2023 & 2024) is loaded from `Capelli2023_and2024_aggregated_data.csv`.
-Current season data (e.g., 2025) is loaded from `aggregated_orders15.csv`.
+Current season data (e.g., 2025) is loaded from `aggregated_orders6.15.csv`.
 Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
 
