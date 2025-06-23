@@ -129,7 +129,7 @@ def load_data(filepath):
     return df
 
 # Load the data
-data_file = os.path.join('shippingdates', 'aggregated_orders6.15.csv')
+data_file = os.path.join('shippingdates', 'aggregated_order22.csv')
 df = load_data(data_file)
 
 # -------------------------- Sidebar Filters -------------------------- #
