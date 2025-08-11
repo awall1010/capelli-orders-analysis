@@ -1184,6 +1184,11 @@ Historical data (2023 & 2024) is loaded from `Capelli2023_and2024_aggregated_dat
 Current season data (e.g., 2025) is loaded from `aggregated_orders8.10.csv`.
 Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
+import os, pathlib, streamlit as st
+st.write("CWD:", os.getcwd())
+st.write("Here:", pathlib.Path(__file__).parent)
+st.write("Root contents:", os.listdir(pathlib.Path(__file__).parent))
+st.write("shippingdates:", os.listdir(pathlib.Path(__file__).parent / "shippingdates"))
 
 # -------------------------- Logging Configuration -------------------------- #
 
