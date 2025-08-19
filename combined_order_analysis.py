@@ -1181,7 +1181,7 @@ st.title("Order Analysis: Historical (2023-2024) vs. Current Season (e.g., 2025)
 st.write("""
 This application analyzes and compares aggregated order data.
 Historical data (2023 & 2024) is loaded from `Capelli2023_and2024_aggregated_data.csv`.
-Current season data (e.g., 2025) is loaded from `aggregated_orders_8.18_.csv`.
+Current season data (e.g., 2025) is loaded from `aggregated_orders8.18_.csv`.
 Explore delivery times and shipping performance across different clubs based on the order creation dates.
 """)
 
@@ -1363,7 +1363,7 @@ def combine_data(df_historical, df_current_season):
 
 # -------------------------- Data Loading -------------------------- #
 data_file_historical = os.path.join('shippingdates', 'Capelli2023_and2024_aggregated_data.csv')
-data_file_current_season = os.path.join('shippingdates', 'aggregated_orders_8.18_.csv')
+data_file_current_season = os.path.join('shippingdates', 'aggregated_orders8.18_.csv')
 
 df_historical_data = load_historical_2023_2024_data(data_file_historical)
 df_current_season_data = load_current_season_data(data_file_current_season)
